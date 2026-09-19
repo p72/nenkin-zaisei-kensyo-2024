@@ -329,7 +329,13 @@ def read_provide(ver, yobi, bas_dir):
     hits = sorted(glob.glob(os.path.join(
         bas_dir, '..', 'data', f'provide{ver}-{yobi}.csv')))
     if not hits:
-        return {}
+        raise SystemExit(
+            f'provide{ver}-{yobi}.csv が見つかりません'
+            f'（{os.path.normpath(os.path.join(bas_dir, "..", "data"))}）。\n'
+            f'一元化レイアウトの「報酬比例」「その他支出」はこのファイルが'
+            f'ないと組み立てられません。\n'
+            f'④を TOUGOU=1 で流すと出ます（outfile.csv の7行目、'
+            f'出力フラグ D）。')
     rows = read_block(hits[0], '独自給付費等（年度間値）', 1, 2000)
     return {y: (float(r['一時金納付分']) + float(r['一時金付加分'])
                 + float(r['付加年金'])) / CHO

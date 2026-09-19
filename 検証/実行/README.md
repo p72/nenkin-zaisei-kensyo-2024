@@ -61,9 +61,9 @@ glibc が C23 の縮小演算関数として宣言する `fdiv` と衝突しま�
 `double` と `float` で違うため `ambiguating new declaration`）。識別子を
 単語単位で一律改名して回避します。計算には触れません。
 
-### 3. `fclose` まわりの潜在バグ3件
+### 3. `fclose` まわりの潜在バグ4件
 
-`patches/glibc-portability.patch`（実質22行）。Solaris では黙認されていた
+`patches/glibc-portability.patch`（実質29行）。Solaris では黙認されていた
 ものが glibc では即クラッシュになります。**いずれも計算結果には影響しません。**
 
 | 箇所 | 内容 | glibc での症状 |
@@ -72,6 +72,7 @@ glibc が C23 の縮小演算関数として宣言する `fdiv` と衝突しま�
 | `基礎年金/main.c:103` | `read_file.c:79` が既に閉じた `fp_in[DOKUZI]` を再度閉じる | `double free or corruption (!prev)` |
 | `基礎年金/printout.c:146` | `printout()` は2回呼ばれるが毎回 `fp_out[OUTPUT]` を閉じる | `double free or corruption (out)` |
 | `収支計算/fcls.c:64` | `Touitu == 0`（通常試算）で開いていない `ifp_Touitu` を閉じる | SIGSEGV |
+| `基礎年金/read_cut.c:56` | `read_cut()` が `CUT` と `CUT_K` を無条件に閉じるが、`infile.csv` の出力フラグで開かれなかった側は NULL のまま | SIGSEGV（調整期間の一致で④の2周目） |
 
 1件目は `std::map::operator[]` が「キーが無ければ既定値（NULL）を挿入する」
 という C++ の仕様を踏んだものです。書き込み自体は `if(pseid == 0)` で
