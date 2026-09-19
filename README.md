@@ -134,43 +134,47 @@ cd 0919nenkin
 pip install pytest openpyxl matplotlib   # openpyxl は掲載表照合、matplotlib は図
 ```
 
-**`/suuri/rev2024` を作る。** プログラムの出力先だけでなく、**同梱データの
-ファイルリスト自身が絶対パスを持っている**ので、この場所は動かせません
-（仕様書 §12.1）。
+**そのまま動きます。** `sudo` もルート権限も要りません。
 
 ```bash
-sudo mkdir -p /suuri && sudo chown "$USER" /suuri     # Linux / WSL2
+python3 -m pytest 検証/          # 65件、数秒
+検証/実行/run_pipeline.sh 3001   # 高成長実現ケース（10〜15分）
 ```
 
-macOS は Catalina 以降 `/` が読み取り専用なので `sudo` でも作れません。
-`/etc/synthetic.conf` を使うか Docker で動かしてください（§12.1 に手順）。
-
-**動作確認**は軽いほうから。通し実行は1ケース10〜15分です。
+プログラムは出力先も入力ファイルリストも `/suuri/rev2024` という絶対パスで
+持っていますが（専用UNIXサーバの固定構成が前提だった名残）、
+`run_pipeline.sh` が**コピーの上で書き換えて**リポジトリ内の `work/` に
+寄せます。原本は触りません（仕様書 §12.1）。
 
 ```bash
-python3 -m pytest 検証/          # 65件。数秒で終わる
-検証/実行/run_pipeline.sh 3001   # 高成長実現ケース
+検証/実行/run_pipeline.sh 3001                 # 既定: <リポジトリ>/work/suuri/rev2024
+SUURI_PREFIX=/ 検証/実行/run_pipeline.sh 3001  # 従来: /suuri/rev2024
+SUURI_PREFIX=/mnt/d 検証/実行/run_pipeline.sh 3001
 ```
 
-**`/suuri` を作らなくても動くもの**があります。リポジトリ内のデータを直接
-読むので、まずここまで確認してから通し実行に進むのが楽です。
+`work/` は `.gitignore` 済みです。1ケースで約2GB使うので、**空きは約3GB**
+見てください。消すときは `rm -rf work` だけです。
 
-| `/suuri` 不要 | 内容 |
+#### まず軽いほうから
+
+通し実行は1ケース10〜15分かかります。**通し実行なしで動く検証**があるので、
+そこまで通してから先に進むのが楽です。
+
+| 通し実行なしで動く | 内容 |
 |---|---|
-| `pytest 検証/` | 65件。原本Cを一時ディレクトリでコンパイルするので `g++` は必要 |
+| `python3 -m pytest 検証/` | 65件。原本Cを一時ディレクトリでコンパイルするので `g++` は必要 |
 | `検証/differential/run_all.sh` | 8ケース × 28,304項目の差分テスト |
-| `検証/verify_kaiteiritu.py` | 公表値との照合サマリ（依存ライブラリなし） |
-| `検証/数式編/verify_bunpu_func.py` | ⑥の関数とレポートの手順の対応（ソースを読むだけ） |
-| `検証/図/make_chart.py` | 図の生成 |
+| `python3 検証/verify_kaiteiritu.py` | 公表値との照合サマリ（依存ライブラリなし） |
+| `python3 検証/数式編/verify_bunpu_func.py` | ⑥の関数とレポートの手順の対応（ソースを読むだけ） |
+| `python3 検証/図/make_chart.py` | 図の生成 |
 
-| `/suuri` 必要 | 内容 |
+| 通し実行の出力が必要 | 内容 |
 |---|---|
-| `検証/実行/` のスクリプト全部 | 通し実行 |
-| `検証/掲載表/compare_keisaihyou.py` | 通し実行の出力と掲載表を照合する |
-| `検証/数式編/verify_shikihen.py` | 同（実測で判定する） |
+| `検証/掲載表/compare_keisaihyou.py` | 掲載表との照合（5,886項目） |
+| `検証/数式編/verify_shikihen.py` | マクロの向きと均衡条件を実測で判定 |
 | `検証/数式編/verify_cc.py` | 検証Bだけ。検証A・Cはソースを読むだけなので不要 |
 
-最後にこう出れば再現できています。
+通し実行の最後にこう出れば再現できています。
 
 ```
 最終代替率

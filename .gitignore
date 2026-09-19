@@ -13,3 +13,6 @@ Thumbs.db
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# 実行領域（検証/実行/run_pipeline.sh が作る。1ケース約2GB）
+/work/

@@ -17,9 +17,10 @@
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
+ROOT=$(cd "$HERE/../.." && pwd)
+. "$HERE/suuri_env.sh"
 CASES=${@:-"3001 3002 3003 3004 3201 3202 3203 3204"}
 OUT="${RESULT_FILE:-/tmp/nenkin-results.txt}"
-SUURI=/suuri/rev2024
 
 roudr_for() {  # ケース番号 → 労働力率の設定
     case "${1: -1}" in

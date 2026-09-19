@@ -78,3 +78,16 @@ python3 検証/掲載表/compare_keisaihyou.py --keisaihyou 掲載表
 相対差が残ります。2024年度の1年分だけ公表表が `1.031` ではなく
 `1.0310310…` を使っているためで、その率が何かは特定できていません。
 導出列なので名目額の照合には影響しません（仕様書 §15.0.2、付録B）。
+
+## 実行領域の場所
+
+通し実行の出力を読む場所は `SUURI_PREFIX` で決まり、既定は
+`<リポジトリ>/work/suuri/rev2024` です（`検証/suuri_env.py`、仕様書 §12.1）。
+`--shushi-dir`・`--bas-dir` で個別に指定することもできます。
+
+```bash
+検証/実行/run_pipeline.sh 3001
+python3 検証/掲載表/compare_keisaihyou.py --keisaihyou 掲載表
+
+SUURI_PREFIX=/ python3 検証/掲載表/compare_keisaihyou.py --keisaihyou 掲載表
+```

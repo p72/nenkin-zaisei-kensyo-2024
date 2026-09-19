@@ -98,6 +98,10 @@ TABLES = {
 OKU = 1e4      # 億円 → 兆円
 EN = 1e12      # 円   → 兆円
 
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+import suuri_env      # noqa: E402  実行領域の場所（§12.1）
+
 
 def sniff(path):
     """出力の文字コードを見分ける。原本を UTF-8 化してビルドすれば出力も
@@ -301,8 +305,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--keisaihyou', required=True,
                     help='2024report_back.zip を展開したディレクトリ')
-    ap.add_argument('--shushi-dir', default='/suuri/rev2024/emp/rslt/ez_arev/shushi')
-    ap.add_argument('--bas-dir', default='/suuri/rev2024/bas/rslt')
+    ap.add_argument('--shushi-dir',
+                    default=suuri_env.suuri('emp', 'rslt', 'ez_arev', 'shushi'))
+    ap.add_argument('--bas-dir', default=suuri_env.suuri('bas', 'rslt'))
     ap.add_argument('--tol', type=float, default=1e-9,
                     help='許容する相対差。既定 1e-9（倍精度の丸め相当）')
     ap.add_argument('--table', help='この掲載表だけ照合（例 第3-7-34表）')

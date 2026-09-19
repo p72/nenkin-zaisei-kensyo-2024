@@ -29,8 +29,12 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+import suuri_env      # noqa: E402  実行領域の場所（§12.1）
+
 SRC = 'papers/001365945/プログラム/厚生年金/収支計算'
-SHUSHI = '/suuri/rev2024/emp/rslt/ez_arev/shushi'
+SHUSHI = suuri_env.suuri('emp', 'rslt', 'ez_arev', 'shushi')
 
 
 def read_src(name, root):

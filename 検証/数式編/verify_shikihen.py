@@ -31,9 +31,13 @@ import collections
 import os
 import sys
 
-SHUSHI = '/suuri/rev2024/emp/rslt/ez_arev/shushi'
-BAS = '/suuri/rev2024/bas/rslt'
-WAKUC = '/suuri/rev2024/wakuc/rslt/ver_4_1'
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+import suuri_env      # noqa: E402  実行領域の場所（§12.1）
+
+SHUSHI = suuri_env.suuri('emp', 'rslt', 'ez_arev', 'shushi')
+BAS = suuri_env.suuri('bas', 'rslt')
+WAKUC = suuri_env.suuri('wakuc', 'rslt', 'ver_4_1')
 
 
 def sniff(path):

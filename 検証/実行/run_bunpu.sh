@@ -41,7 +41,8 @@ SHISAN="${SHISAN:-$ECON}"
 YOBI=125          # 分布推計は cuta/cutb の予備番号 125（object01f=1）を読む
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-SUURI=/suuri/rev2024
+ROOT=$(cd "$HERE/../.." && pwd)
+. "$HERE/suuri_env.sh"
 BUNPU="$SUURI/bunpu"
 
 # 分布推計が読む入力の対応（prog04.cpp）

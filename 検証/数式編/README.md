@@ -112,3 +112,19 @@ python3 検証/掲載表/compare_keisaihyou.py --keisaihyou 掲載表 --deflated
 ```
 
 導出列なので名目額の照合（5,886項目全一致）には影響しません。
+
+## 実行領域の場所
+
+`verify_shikihen.py` と `verify_cc.py`（検証B）は通し実行の出力を読みます。
+場所は `SUURI_PREFIX` で決まり、既定は `<リポジトリ>/work/suuri/rev2024` です
+（`検証/suuri_env.py`、仕様書 §12.1）。
+
+```bash
+検証/実行/run_pipeline.sh 3001                      # 既定の場所に出力
+python3 検証/数式編/verify_shikihen.py
+
+SUURI_PREFIX=/ 検証/実行/run_pipeline.sh 3001       # 従来の /suuri に出力したなら
+SUURI_PREFIX=/ python3 検証/数式編/verify_shikihen.py
+```
+
+`verify_bunpu_func.py` はソースを読むだけなので通し実行は不要です。

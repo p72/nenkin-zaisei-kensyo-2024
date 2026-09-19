@@ -116,10 +116,12 @@ def build(sei, base_age, dist, grade):
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(os.path.dirname(here))
+    sys.path.insert(0, os.path.join(root, '検証'))
+    import suuri_env
     ap = argparse.ArgumentParser()
     ap.add_argument('--kisoritsu',
-                    default='/suuri/rev2024/bunpu/kisoritsu')
-    ap.add_argument('--out', default='/suuri/rev2024/bunpu/kisosuu')
+                    default=suuri_env.suuri('bunpu', 'kisoritsu'))
+    ap.add_argument('--out', default=suuri_env.suuri('bunpu', 'kisosuu'))
     ap.add_argument('--shisan', default='2011', help='外枠番号（遷移表のファイル名末尾）')
     ap.add_argument('--grade', type=int, default=1,
                     help='総報酬等級 var040 の初期値（1〜53、既定1＝最低等級）')

@@ -22,6 +22,10 @@
 #   SIGO    基礎45年化 0/1 既定: 0（通常試算）
 #   SKIP_BUILD=1  ビルドを飛ばす（同じビルドを使い回す）
 #
+#   SUURI_PREFIX  実行領域の置き場所。既定は <リポジトリ>/work
+#                 （root 権限が要らないので、ローカルでもそのまま動く）
+#                 SUURI_PREFIX=/ にすると従来どおり /suuri/rev2024 を使う
+#
 # 分布推計の外枠番号は3桁目が適用拡大の区分を表す（2011→0、2211→2 …）。
 # その外枠を作るときは KAKUDAI をその値に合わせる必要がある。
 # run_bunpu.sh が自動でそうする。
@@ -32,6 +36,24 @@
 # 作り、そこに patches/glibc-portability.patch を当ててからビルドする。
 # ソースを UTF-8 化してビルドするので、実行時の日本語出力も UTF-8 になる
 # （原本のまま EUC-JP でビルドすれば出力も EUC-JP）。
+#
+# -----------------------------------------------------------------------------
+# 絶対パス /suuri/rev2024 について
+# -----------------------------------------------------------------------------
+# 原本は出力先も入力ファイルリストも /suuri/rev2024 という絶対パスで持って
+# いる（専用UNIXサーバの固定構成が前提だった名残）。
+#
+#   プログラム側  被保険者推計/readdata.c など16ファイル（Makefile を含む）
+#   データ側      {nat,bas}/io_file/{infile,outfile}.csv の4ファイル
+#
+# ルート直下に書き込めない環境（macOS は Catalina 以降 / が読み取り専用、
+# 共有サーバで sudo が無い等）でも動くように、この2種類を**コピーの上で**
+# 書き換えて任意の場所に寄せる。原本は触らない。
+#
+#   プログラム側 → ビルドツリー（毎回 rm -rf して作り直すので冪等）
+#   データ側     → 原本から sed して実行領域へ書き出す（毎回生成なので冪等）
+#
+# データ側は CSV の3列目が必ず「,」に続くので `,/suuri/` を目印にする。
 # =============================================================================
 set -e
 
@@ -49,8 +71,9 @@ ROOT=$(cd "$HERE/../.." && pwd)
 SRC="$ROOT/papers/001365945/プログラム"
 DATA="$ROOT/papers/001365945/データ/suuri/rev2024"
 BUILD="${BUILD_DIR:-/tmp/nenkin-build}"
-# プログラムは出力先を絶対パスで持っているので、この場所は変えられない
-SUURI=/suuri/rev2024
+
+# 実行領域（PREFIX・SUURI を決める）
+. "$HERE/suuri_env.sh"
 
 step() { echo; echo "############ $* ############"; }
 
@@ -76,11 +99,45 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
     # 関数 fdiv() と名前が衝突する。単語単位の機械的な改名で回避する。
     step "fdiv() の名前衝突を回避（識別子の一律改名）"
     cd "$BUILD/国民年金" && sed -i 's/\bfdiv\b/nenkin_fdiv/g' *.c *.h
+
+    if [ -n "$PREFIX" ]; then
+        step "絶対パス /suuri を $PREFIX/suuri に寄せる（ビルドツリーのコピー）"
+        cd "$BUILD"
+        grep -rl '/suuri/' . | while read -r f; do
+            sed -i "s|/suuri/|$PREFIX/suuri/|g" "$f"
+        done
+
+        # パスが長くなる分、固定長のファイル名バッファを広げる。
+        # 原本は /suuri/rev2024（14文字）前提の寸法になっていて、
+        # 収支計算の char flname[100] はプレフィックスを付けると溢れる。
+        # glibc の _FORTIFY_SOURCE が検出して
+        #   *** buffer overflow detected ***: terminated
+        # で落ちる（⑤の実行中に発生）。原本のままなら起きないので、
+        # プレフィックスを付けたときだけ広げる。
+        step "ファイル名バッファを拡張（パスが $((${#PREFIX})) 文字伸びるため）"
+        sed -i 's/char flname\[100\]/char flname[1024]/' 厚生年金/収支計算/fopn.c
+        sed -i -E 's/(char[[:space:]]+(filename|pathname)[[:space:]]*)\[250\]/\1[1024]/' \
+            被保険者推計/*.c 被保険者推計/*.h
+        grep -n 'flname\[' 厚生年金/収支計算/fopn.c
+    fi
 fi
 
 step "データを $SUURI に配置"
 mkdir -p "$SUURI"
 cp -rn "$DATA"/* "$SUURI/" 2>/dev/null || true
+
+# 入出力ファイルリストは原本から毎回生成する（cp -rn は上書きしないので、
+# 実行領域に残った書き換え済みの版を二重に書き換えてしまうのを避ける）
+for rel in nat/io_file/infile.csv nat/io_file/outfile.csv \
+           bas/io_file/infile.csv bas/io_file/outfile.csv; do
+    mkdir -p "$SUURI/$(dirname "$rel")"
+    if [ -n "$PREFIX" ]; then
+        sed "s|,/suuri/|,$PREFIX/suuri/|g" "$DATA/$rel" > "$SUURI/$rel"
+    else
+        cp "$DATA/$rel" "$SUURI/$rel"
+    fi
+done
+
 mkdir -p "$SUURI"/{nat,bas,emp,bunpu,wakuc}/{exec,rslt,log}
 mkdir -p "$SUURI"/nat/data "$SUURI"/bas/{data,settei}
 mkdir -p "$SUURI"/emp/rslt/u-rev/{shus,shusg,kiso,kisor,hou,kaite,hikaku,ashimoto,bunpu,prt}
@@ -141,9 +198,20 @@ cp "$SUURI/bas/rslt/cuta-$SHISAN-$SHISAN-$ECON-$WAKU-1120-$YOBI.csv" \
    "$SUURI/emp/rslt/ez_arev/cutr/"
 
 step "⑤ 厚生年金 収支計算 を実行（所得代替率）"
-cd "$SUURI/emp" && printf "0\n8\n%s\n%s\n0\n0\n0\n0\n%s\n%s\n%s\n%s\n" \
+# grep をパイプで挟むと終了状態が隠れるので PIPESTATUS で本体の結果を見る
+# （ここを素通しにしていたため、⑤が buffer overflow で落ちても「完了」と
+#  表示してしまっていた）
+cd "$SUURI/emp" && set +e
+printf "0\n8\n%s\n%s\n0\n0\n0\n0\n%s\n%s\n%s\n%s\n" \
     "$KAKUDAI" "$SIGO" "$SHISAN" "$ECON" "$WAKU" "$YOBI" | "$SUURI/emp/exec/asys20" \
-    | grep -A 4 "最終代替率" || true
+    | grep -A 4 "最終代替率"
+rc=${PIPESTATUS[1]}
+set -e
+if [ "$rc" != "0" ]; then
+    echo
+    echo "★ ⑤ 収支計算 が異常終了しました（終了コード $rc）" >&2
+    exit "$rc"
+fi
 
 echo
 echo "############ 完了（試算番号 $SHISAN / 経済前提 $ECON / 外枠 $WAKU / 予備 $YOBI / 適用拡大 $KAKUDAI） ############"
