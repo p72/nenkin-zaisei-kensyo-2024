@@ -184,7 +184,39 @@ BUILD="${BUILD_DIR:-/tmp/nenkin-build}"
 # 実行領域（PREFIX・SUURI を決める）
 . "$HERE/suuri_env.sh"
 
-step() { echo; echo "############ $* ############"; }
+# 工程ごとの所要秒を測る。step を呼んだ時点で直前の工程を締める。
+T_START=$(date +%s)
+STEP_T0=$T_START
+STEP_NAME=""
+STEP_SECS=()
+STEP_NAMES=()
+
+step() {
+    local now
+    now=$(date +%s)
+    if [ -n "$STEP_NAME" ]; then
+        STEP_SECS+=( "$((now - STEP_T0))" )
+        STEP_NAMES+=( "$STEP_NAME" )
+    fi
+    STEP_NAME="$*"
+    STEP_T0=$now
+    if [ -n "$*" ]; then
+        echo
+        echo "############ $* ############"
+    fi
+}
+
+step_report() {
+    local i
+    step ""                       # 最後の工程を締める
+    echo
+    echo "---- 所要時間 ----"
+    for i in "${!STEP_SECS[@]}"; do
+        printf '  %5d 秒  %s\n' "${STEP_SECS[$i]}" "${STEP_NAMES[$i]}"
+    done
+    printf '  %5d 秒  合計\n' "$(( $(date +%s) - T_START ))"
+}
+
 run_step() { case "$STEPS" in *"$1"*) return 0 ;; *) return 1 ;; esac; }
 
 # --------------------------------------------------------------- 準備
@@ -369,6 +401,8 @@ if [ "$TOUGOU" = 1 ] && run_step 4; then
     run_bas "$YOBI2" 1
 fi
 fi
+
+step_report
 
 echo
 echo "############ 完了 ############"
