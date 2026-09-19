@@ -129,7 +129,7 @@ cp "$SUURI/bas/rslt/cuta-$SHISAN-$SHISAN-$ECON-$WAKU-1120-$YOBI.csv" \
 step "⑤ 厚生年金 収支計算 を実行（所得代替率）"
 cd "$SUURI/emp" && printf "0\n8\n0\n0\n0\n0\n0\n0\n%s\n%s\n%s\n%s\n" \
     "$SHISAN" "$ECON" "$WAKU" "$YOBI" | "$SUURI/emp/exec/asys20" \
-    | grep -A 3 "最終代替率" || true
+    | grep -A 4 "最終代替率" || true
 
 echo
 echo "############ 完了（試算番号 $SHISAN / 経済前提 $ECON / 外枠 $WAKU / 予備 $YOBI） ############"

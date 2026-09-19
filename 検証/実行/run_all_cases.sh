@@ -58,14 +58,15 @@ for c in $CASES; do
         tot=$(echo "$nums" | sed -n 1p | cut -c1-7)
         pro=$(echo "$nums" | sed -n 2p | cut -c1-7)
         kis=$(echo "$nums" | sed -n 3p | cut -c1-7)
-        # 調整最終年度の行は 収支計算 のソースが EUC-JP のまま残るため
-        # ラベルに頼らず「2桁の整数 (小数)」の並びから拾う
-        yrs=$(grep -A 3 "最終代替率" "$log" | grep -oE "[0-9]{2} \([0-9]+\.[0-9]+\)" \
-              | grep -oE "^[0-9]{2}" | tr '\n' ' ')
-        ky=$(echo $yrs | cut -d' ' -f1); ny=$(echo $yrs | cut -d' ' -f2)
+        # 比例側の調整最終年度は 収支計算 の出力から。ソースの一部が EUC-JP の
+        # まま残るためラベルに頼らず「2桁の整数 (小数)」の並びで拾う
+        ky=$(grep -A 4 "最終代替率" "$log" | grep -oE "[0-9]{2} \([0-9]+\.[0-9]+\)" \
+             | grep -oE "^[0-9]{2}" | head -1)
+        # 基礎側は ④基礎年金 が西暦で出すのでそれを使う
+        ny=$(grep -oE "終了年度 [0-9]{4}" "$log" | grep -oE "[0-9]{4}" | head -1)
         printf "%-8s %-28s %10s %10s %10s %8s %8s\n" \
             "$c" "$nm" "${tot:-?}" "${pro:-?}" "${kis:-?}" \
-            "${ky:+20$ky}" "${ny:+20$ny}" | tee -a "$OUT"
+            "${ky:+20$ky}" "${ny:-?}" | tee -a "$OUT"
     else
         printf "%-8s %-28s %s\n" "$c" "$nm" "実行失敗（ログ: $log）" | tee -a "$OUT"
         continue
