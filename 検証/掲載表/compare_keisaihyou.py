@@ -210,6 +210,93 @@ def find_run(spec, case, shushi_dir, bas_dir):
     return hits[0] if hits else None
 
 
+def read_rv(path):
+    """⑤の 03summary の経済前提ブロックから比例改定率を読む。
+    このファイルは後続ブロックにも数値行があるので、年度が連続しなくなった
+    ところで打ち切る（そうしないと後ろのブロックで上書きされる）。"""
+    enc = sniff(path)
+    lines = open(path, 'rb').read().decode(enc, 'replace').splitlines()
+    hi = next(i for i, l in enumerate(lines) if l.startswith('年度,物価'))
+    ci = [c.strip() for c in lines[hi].split(',')].index('比例改定率')
+    rv, prev = {}, None
+    for l in lines[hi + 1:]:
+        f = [x.strip() for x in l.split(',')]
+        if not f or not f[0].isdigit():
+            break
+        y = int(f[0])
+        if prev is not None and y != prev + 1:
+            break
+        prev = y
+        rv[y + 2000] = 1.0 + float(f[ci]) / 100.0
+    return rv
+
+
+def check_deflated(args):
+    """各掲載表の第5列「賃金上昇率で2024年度価格に換算した額」の換算率を、
+    こちらの比例改定率系列と突き合わせる（仕様書 §15.0.2）。
+
+    名目額 D と換算額 E から D/E の年次比を作ると、それが前年度の改定率に
+    なっているかを見る。2026年度以降は倍精度の丸めまで一致し、2024年度の
+    1要素だけが食い違う。"""
+    import openpyxl
+    rv = read_rv(find_run({'source': 'shushi'}, '3001', args.shushi_dir, args.bas_dir)
+                 .replace('90nenbe.', '03summary.').replace('e_08tou', '_08sum'))
+
+    print("=" * 78)
+    print("「2024年度価格」列の換算率（§15.0.2）")
+    print("=" * 78)
+    print("主張: 換算率の系列はこちらの比例改定率そのもの。")
+    print("      ただし2024年度の1要素だけ 1.031 ではなく 1030/999。")
+    print()
+
+    ratios = {}
+    for tname, spec in TABLES.items():
+        xlsx = find_xlsx(args.keisaihyou, spec['pat'])
+        if xlsx is None:
+            continue
+        sheet = next(s for s, c in spec['sheets'].items() if c == '3001')
+        wb = openpyxl.load_workbook(xlsx, data_only=True)
+        if sheet not in wb.sheetnames:
+            continue
+        pub = {}
+        for row in wb[sheet].iter_rows(values_only=True):
+            if len(row) > 4 and isinstance(row[spec['col_year']], (int, float)) \
+                    and row[3] and row[4]:
+                pub[int(row[spec['col_year']])] = (row[3], row[4])
+        if 2025 in pub:
+            ratios[tname] = pub[2025][0] / pub[2025][1]
+        if tname == '第3-7-29表':
+            base = pub
+
+    print("  2025年度の D/E（各表とも同じ値になるはず）")
+    for t, r in ratios.items():
+        print(f"    {t}  {r:.17f}")
+    print(f"    1030/999   = {1030 / 999:.17f}")
+    print(f"    こちらの2024年度改定率 = {rv[2024]:.17f}")
+    print()
+
+    print(f"  {'年度':<6}{'D/E の年次比':>22}{'こちらの RV[年度−1]':>22}{'相対差':>11}")
+    ok = ng = 0
+    worst = (0.0, None)
+    for y in sorted(base):
+        if y - 1 not in base or y - 1 not in rv:
+            continue
+        r = (base[y][0] / base[y][1]) / (base[y - 1][0] / base[y - 1][1])
+        rel = abs(r - rv[y - 1]) / rv[y - 1]
+        if y >= 2026:
+            if rel > worst[0]:
+                worst = (rel, y)
+            ok, ng = (ok + 1, ng) if rel < 1e-12 else (ok, ng + 1)
+        if y <= 2027 or y == max(base):
+            print(f"  {y:<6}{r:>22.16f}{rv[y - 1]:>22.16f}{rel:>11.1e}")
+    print()
+    print(f"  2026年度以降: 一致 {ok} / 不一致 {ng}   最大相対差 {worst[0]:.2e}"
+          f"（{worst[1]}年度）")
+    print(f"  2025年度のみ食い違う（相対差 3.0e-05）。その1要素の出所は未特定。")
+    print("=" * 78)
+    return 0 if ng == 0 and ok > 0 else 1
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--keisaihyou', required=True,
@@ -219,7 +306,12 @@ def main():
     ap.add_argument('--tol', type=float, default=1e-9,
                     help='許容する相対差。既定 1e-9（倍精度の丸め相当）')
     ap.add_argument('--table', help='この掲載表だけ照合（例 第3-7-34表）')
+    ap.add_argument('--deflated', action='store_true',
+                    help='「2024年度価格」列の換算率を調べる（名目額の照合はしない）')
     args = ap.parse_args()
+
+    if args.deflated:
+        return check_deflated(args)
 
     try:
         import openpyxl
