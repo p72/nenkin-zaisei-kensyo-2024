@@ -120,6 +120,64 @@ iconv -f EUCJP-MS -t UTF-8 papers/001365945/プログラム/国民年金/main.c
 `.gitattributes` で `* -text` を指定し、改行・テキスト正規化を無効化して
 **バイト単位で原本を保全**しています。
 
+### 手元で動かす
+
+```bash
+git clone https://github.com/p72/0919nenkin.git
+cd 0919nenkin
+```
+
+**必要なもの**: `gcc`／`g++`、`iconv`（`EUCJP-MS` 対応）、`patch`、`python3`、
+空きディスク約3GB（1ケースの出力が約2GB）。
+
+```bash
+pip install pytest openpyxl matplotlib   # openpyxl は掲載表照合、matplotlib は図
+```
+
+**`/suuri/rev2024` を作る。** プログラムの出力先だけでなく、**同梱データの
+ファイルリスト自身が絶対パスを持っている**ので、この場所は動かせません
+（仕様書 §12.1）。
+
+```bash
+sudo mkdir -p /suuri && sudo chown "$USER" /suuri     # Linux / WSL2
+```
+
+macOS は Catalina 以降 `/` が読み取り専用なので `sudo` でも作れません。
+`/etc/synthetic.conf` を使うか Docker で動かしてください（§12.1 に手順）。
+
+**動作確認**は軽いほうから。通し実行は1ケース10〜15分です。
+
+```bash
+python3 -m pytest 検証/          # 65件。数秒で終わる
+検証/実行/run_pipeline.sh 3001   # 高成長実現ケース
+```
+
+**`/suuri` を作らなくても動くもの**があります。リポジトリ内のデータを直接
+読むので、まずここまで確認してから通し実行に進むのが楽です。
+
+| `/suuri` 不要 | 内容 |
+|---|---|
+| `pytest 検証/` | 65件。原本Cを一時ディレクトリでコンパイルするので `g++` は必要 |
+| `検証/differential/run_all.sh` | 8ケース × 28,304項目の差分テスト |
+| `検証/verify_kaiteiritu.py` | 公表値との照合サマリ（依存ライブラリなし） |
+| `検証/数式編/verify_bunpu_func.py` | ⑥の関数とレポートの手順の対応（ソースを読むだけ） |
+| `検証/図/make_chart.py` | 図の生成 |
+
+| `/suuri` 必要 | 内容 |
+|---|---|
+| `検証/実行/` のスクリプト全部 | 通し実行 |
+| `検証/掲載表/compare_keisaihyou.py` | 通し実行の出力と掲載表を照合する |
+| `検証/数式編/verify_shikihen.py` | 同（実測で判定する） |
+| `検証/数式編/verify_cc.py` | 検証Bだけ。検証A・Cはソースを読むだけなので不要 |
+
+最後にこう出れば再現できています。
+
+```
+最終代替率
+ 一元化モデル：56.9122495807027
+     うち比例：24.9711420191125 , うち基礎：31.9411075615902
+```
+
 ### 動きます
 
 ```bash
