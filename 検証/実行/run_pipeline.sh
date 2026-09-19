@@ -18,7 +18,13 @@
 #   ECON    経済前提番号 既定: 第1引数
 #   WAKU    外枠番号     既定: 第1引数
 #   YOBI    予備番号     既定: 000
+#   KAKUDAI 適用拡大 0〜5 既定: 0（通常試算）
+#   SIGO    基礎45年化 0/1 既定: 0（通常試算）
 #   SKIP_BUILD=1  ビルドを飛ばす（同じビルドを使い回す）
+#
+# 分布推計の外枠番号は3桁目が適用拡大の区分を表す（2011→0、2211→2 …）。
+# その外枠を作るときは KAKUDAI をその値に合わせる必要がある。
+# run_bunpu.sh が自動でそうする。
 #
 # 必要なもの: gcc/g++、iconv、patch、約3GBの空きディスク
 #
@@ -35,6 +41,8 @@ SHISAN="${SHISAN:-$BANGO}"
 ECON="${ECON:-$BANGO}"
 WAKU="${WAKU:-$BANGO}"
 YOBI="${YOBI:-000}"
+KAKUDAI="${KAKUDAI:-0}"
+SIGO="${SIGO:-0}"
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
@@ -106,19 +114,20 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
 fi
 
 # --------------------------------------------------------------- 実行
-# 適用拡大なし(0)・基礎45年化なし(0)＝通常試算で固定
-step "① 被保険者推計 を実行（外枠 $WAKU）"
-cd "$SUURI/wakuc" && printf "%s\n0\n0\n%s\n%s\n%s\n%s\n" \
-    "$WAKU" "$JIN" "$QX" "$NC" "$ROUDR" | "$SUURI/wakuc/exec/wakuc_4_1" > /dev/null
+step "① 被保険者推計 を実行（外枠 $WAKU / 適用拡大 $KAKUDAI / 45年化 $SIGO）"
+cd "$SUURI/wakuc" && printf "%s\n%s\n%s\n%s\n%s\n%s\n%s\n" \
+    "$WAKU" "$KAKUDAI" "$SIGO" "$JIN" "$QX" "$NC" "$ROUDR" \
+    | "$SUURI/wakuc/exec/wakuc_4_1" > /dev/null
 
 step "② 厚生年金 給付費推計 を実行（厚年＋共済3制度）"
-cd "$SUURI/emp" && printf "11\n%s\n%s\n%s\n4\n0\n0\n0\n0\n%s\n" \
-    "$SHISAN" "$ECON" "$WAKU" "$((ROUDR-1))" | "$SUURI/emp/exec/usys20" > /dev/null
+cd "$SUURI/emp" && printf "11\n%s\n%s\n%s\n4\n%s\n%s\n0\n0\n%s\n" \
+    "$SHISAN" "$ECON" "$WAKU" "$KAKUDAI" "$SIGO" "$((ROUDR-1))" \
+    | "$SUURI/emp/exec/usys20" > /dev/null
 
 step "③ 国民年金 を実行"
 cd "$SUURI/nat" && "$SUURI/nat/exec/ver0000.out" \
     "$SUURI/nat/io_file/infile.csv" "$SUURI/nat/io_file/outfile.csv" \
-    "$SHISAN" "$ECON" "$WAKU" 0 M 0 1 0 2027 0 2031 3 "$WAKU" > /dev/null
+    "$SHISAN" "$ECON" "$WAKU" 0 M 0 1 "$KAKUDAI" 2027 0 2031 3 "$WAKU" > /dev/null
 
 step "④ 基礎年金 を実行（マクロ経済スライドの調整終了年度を解く）"
 : > "$SUURI/bas/rslt/output.csv"
@@ -132,9 +141,9 @@ cp "$SUURI/bas/rslt/cuta-$SHISAN-$SHISAN-$ECON-$WAKU-1120-$YOBI.csv" \
    "$SUURI/emp/rslt/ez_arev/cutr/"
 
 step "⑤ 厚生年金 収支計算 を実行（所得代替率）"
-cd "$SUURI/emp" && printf "0\n8\n0\n0\n0\n0\n0\n0\n%s\n%s\n%s\n%s\n" \
-    "$SHISAN" "$ECON" "$WAKU" "$YOBI" | "$SUURI/emp/exec/asys20" \
+cd "$SUURI/emp" && printf "0\n8\n%s\n%s\n0\n0\n0\n0\n%s\n%s\n%s\n%s\n" \
+    "$KAKUDAI" "$SIGO" "$SHISAN" "$ECON" "$WAKU" "$YOBI" | "$SUURI/emp/exec/asys20" \
     | grep -A 4 "最終代替率" || true
 
 echo
-echo "############ 完了（試算番号 $SHISAN / 経済前提 $ECON / 外枠 $WAKU / 予備 $YOBI） ############"
+echo "############ 完了（試算番号 $SHISAN / 経済前提 $ECON / 外枠 $WAKU / 予備 $YOBI / 適用拡大 $KAKUDAI） ############"
