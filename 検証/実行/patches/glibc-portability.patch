@@ -65,3 +65,22 @@ diff -ruN --strip-trailing-cr "orig_utf8/\345\237\272\347\244\216\345\271\264\35
  
  
  
+diff -ruN --strip-trailing-cr "orig_utf8/\345\237\272\347\244\216\345\271\264\351\207\221/read_cut.c" "clean_patched/\345\237\272\347\244\216\345\271\264\351\207\221/read_cut.c"
+--- "orig_utf8/\345\237\272\347\244\216\345\271\264\351\207\221/read_cut.c"	2026-09-19 11:45:08.121186625 +0000
++++ "clean_patched/\345\237\272\347\244\216\345\271\264\351\207\221/read_cut.c"	2026-09-19 11:45:08.131096029 +0000
+@@ -53,8 +53,13 @@
+ 		}
+ 	}
+ 
+-	fclose( fp_in[CUT] );
+-	fclose( fp_in[CUT_K] );
++	/* [移植パッチ] read_cut() は CUT（カット率固定）と CUT_K（過去分）の
++	   どちらか一方の経路からしか呼ばれないが、両方を無条件に閉じている。
++	   開いていない側は infile.csv の出力フラグ（B・C）で読み飛ばされて
++	   NULL のままなので、glibc の fclose(NULL) は即 SEGV になる。
++	   調整期間一致（CUT_KOTEI=1）で初めて通る経路。結果には影響しない。 */
++	if( fp_in[CUT]   != NULL ) fclose( fp_in[CUT]   );
++	if( fp_in[CUT_K] != NULL ) fclose( fp_in[CUT_K] );
+ 
+ 
+ 	return;

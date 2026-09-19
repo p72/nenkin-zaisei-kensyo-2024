@@ -18,9 +18,45 @@
 #   ECON    経済前提番号 既定: 第1引数
 #   WAKU    外枠番号     既定: 第1引数
 #   YOBI    予備番号     既定: 000
-#   KAKUDAI 適用拡大 0〜5 既定: 0（通常試算）
-#   SIGO    基礎45年化 0/1 既定: 0（通常試算）
 #   SKIP_BUILD=1  ビルドを飛ばす（同じビルドを使い回す）
+#
+# -----------------------------------------------------------------------------
+# オプション試算のレバー（既定は全部0＝通常試算）
+# -----------------------------------------------------------------------------
+#   KAKUDAI 0〜5  被用者保険の適用拡大
+#                 1:90万人 2:200万人 3:270万人 4:860万人 5:賃金要件のみ撤廃
+#   SIGO    0/1   基礎年金の拠出期間45年化
+#   KOZAX   0/1   65歳以上の在職老齢年金の撤廃
+#   HOUJOU  0〜3  標準報酬月額の上限の見直し（1:75万 2:83万 3:98万）
+#   TOUGOU  0/1   マクロ経済スライドの調整期間の一致（基礎と比例）
+#   DMACRO  0/1   名目下限措置の撤廃（マクロ経済スライドのフル発動）
+#   CARRY   0/1   キャリーオーバー（1:あり＝現行、0:行わない）★既定は1
+#
+#   WAKU_M  外枠番号  SIGO=1 のとき⑤が読む waku****-m.csv の番号（既定 WAKU）
+#   YOBI2   3桁      TOUGOU=1 のとき⑤が書く統一カット率の予備番号（既定 001）
+#                    YOBI と必ず別の番号にすること（同名を2重に開いて壊れる）
+#
+# どのレバーがどのプログラムに入るかは原本で確認済み:
+#
+#   レバー   ②給付費推計          ④基礎年金       ⑤収支計算
+#   KAKUDAI  flg_part (入力6)      ―               Flg_Part (入力3)
+#   SIGO     flg_sigo (入力7)      ―               Flg_Sigo (入力4)
+#   KOZAX    flg_kozax(入力8)      ―               ―
+#   HOUJOU   houjou   (入力9)      ―               Flg_Houjou (入力5)
+#   TOUGOU   ―                    argv[15]        Touitu (入力6)
+#   DMACRO   ―                    argv[11]        Flg_Dmakuro (入力8)
+#   CARRY    ―                    argv[10]        Flg_Kmakuro (入力7、極性が逆)
+#
+# CARRY の極性に注意。④の argv[10] は「1=キャリーオーバーあり」ですが、
+# ⑤の Flg_Kmakuro は「1=キャリーオーバー撤廃」です（cntl.c:168-171）。
+# このスクリプトは CARRY=1（現行）に対して ⑤へ 0 を渡します。
+#
+# TOUGOU=1 のときだけ④を2回まわします（原本の想定する手順）。
+#   1周目 CUT_KOTEI=0  基礎年金が自前で有限均衡を解き、比例側に渡す
+#                      provide / KYOSHUTUKIN（ss=7,8 付き）を書く
+#   ⑤     Touitu=1     基礎と比例を一括で均衡させ、統一カット率を
+#                      cuta/cutb-…-1120-{YOBI2}.csv に書く
+#   2周目 CUT_KOTEI=1  その統一カット率を読んで基礎年金の見通しを作り直す
 #
 #   SUURI_PREFIX  実行領域の置き場所。既定は <リポジトリ>/work
 #                 （root 権限が要らないので、ローカルでもそのまま動く）
@@ -65,6 +101,50 @@ WAKU="${WAKU:-$BANGO}"
 YOBI="${YOBI:-000}"
 KAKUDAI="${KAKUDAI:-0}"
 SIGO="${SIGO:-0}"
+KOZAX="${KOZAX:-0}"
+HOUJOU="${HOUJOU:-0}"
+TOUGOU="${TOUGOU:-0}"
+DMACRO="${DMACRO:-0}"
+CARRY="${CARRY:-1}"
+WAKU_M="${WAKU_M:-$WAKU}"
+YOBI2="${YOBI2:-001}"
+
+die() { echo "★ $*" >&2; exit 1; }
+chk() { # chk 変数名 値 許される値...
+    local name="$1" val="$2" ok hit=0
+    shift 2
+    for ok in "$@"; do
+        if [ "$val" = "$ok" ]; then hit=1; fi
+    done
+    if [ "$hit" = 0 ]; then
+        die "$name の値が不正です: 「$val」（許されるのは $*）"
+    fi
+}
+chk KAKUDAI "$KAKUDAI" 0 1 2 3 4 5
+chk SIGO    "$SIGO"    0 1
+chk KOZAX   "$KOZAX"   0 1
+chk HOUJOU  "$HOUJOU"  0 1 2 3
+chk TOUGOU  "$TOUGOU"  0 1
+chk DMACRO  "$DMACRO"  0 1
+chk CARRY   "$CARRY"   0 1
+chk JIN     "$JIN"     1 2 3
+chk QX      "$QX"      1 2 3
+chk ROUDR   "$ROUDR"   1 2 3
+
+# ⑤は Touitu>=1 のとき cuta/cutb を YOBI と YOBI2 の2組そろえて書き込み用に
+# 開く（fopn.c:158-190）。同じ番号だと同名のファイルを2つのハンドルで開いて
+# 中身が壊れるので、ここで止める。
+if [ "$TOUGOU" = 1 ] && [ "$YOBI2" = "$YOBI" ]; then
+    die "TOUGOU=1 のときは YOBI2（$YOBI2）を YOBI（$YOBI）と別の3桁にしてください"
+fi
+
+# ②③は出生率・死亡率を番号ではなくファイル名で選ぶ
+#   ②seimei      4:死亡中位 5:死亡高位 6:死亡低位      → QX + 3
+#   ③BIRTHFILE   birth_ratio_0:中位 _1:高位 _2:低位    → JIN − 1
+#   ③DEATH       QX-M2023:中位 H:高位 L:低位
+SEIMEI=$((QX + 3))
+BIRTHFILE=$((JIN - 1))
+case "$QX" in 1) DEATH=M ;; 2) DEATH=H ;; 3) DEATH=L ;; esac
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
@@ -177,34 +257,66 @@ cd "$SUURI/wakuc" && printf "%s\n%s\n%s\n%s\n%s\n%s\n%s\n" \
     | "$SUURI/wakuc/exec/wakuc_4_1" > /dev/null
 
 step "② 厚生年金 給付費推計 を実行（厚年＋共済3制度）"
-cd "$SUURI/emp" && printf "11\n%s\n%s\n%s\n4\n%s\n%s\n0\n0\n%s\n" \
-    "$SHISAN" "$ECON" "$WAKU" "$KAKUDAI" "$SIGO" "$((ROUDR-1))" \
+# 入力順は main.cpp（key, 試算番号, 経済前提, 外枠）→ cntl.cpp（seimei,
+# flg_part, flg_sigo, flg_kozax, houjou, flg_inout）の計10個。
+# psly/pslsi/pslsi2 は if(key==12||key==13) の中なので key=11 では読まれない。
+cd "$SUURI/emp" && printf "11\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n" \
+    "$SHISAN" "$ECON" "$WAKU" "$SEIMEI" \
+    "$KAKUDAI" "$SIGO" "$KOZAX" "$HOUJOU" "$((ROUDR-1))" \
     | "$SUURI/emp/exec/usys20" > /dev/null
 
 step "③ 国民年金 を実行"
 cd "$SUURI/nat" && "$SUURI/nat/exec/ver0000.out" \
     "$SUURI/nat/io_file/infile.csv" "$SUURI/nat/io_file/outfile.csv" \
-    "$SHISAN" "$ECON" "$WAKU" 0 M 0 1 "$KAKUDAI" 2027 0 2031 3 "$WAKU" > /dev/null
+    "$SHISAN" "$ECON" "$WAKU" "$BIRTHFILE" "$DEATH" 0 1 "$KAKUDAI" 2027 0 2031 3 "$WAKU" \
+    > /dev/null
+
+# ④ 基礎年金（引数17個。順番は原本の jikko_bas.sh と cntl.c:28-60）
+#   argv: infile outfile 厚年番号 国年番号 経済前提 外枠 外枠(カット用) 予備
+#         過去分 キャリーオーバー 名目下限撤廃 オプション オプション開始年度
+#         引上げ間隔 調整期間一致 カット率固定 カット率一本出し
+# grep をパイプに挟むと終了状態が隠れるので、ここも PIPESTATUS で見る
+run_bas() {   # run_bas <予備番号> <カット率固定 0/1>
+    local rc
+    cd "$SUURI/bas" && set +e
+    "$SUURI/bas/exec/ver0000.out" \
+        "$SUURI/bas/io_file/infile.csv" "$SUURI/bas/io_file/outfile.csv" \
+        "$SHISAN" "$SHISAN" "$ECON" "$WAKU" "$WAKU" "$1" \
+        0 "$CARRY" "$DMACRO" 0 2031 3 "$TOUGOU" "$2" 0 \
+        | grep -E "終了年度|カット率|給付率|代替率換算"
+    rc=${PIPESTATUS[0]}
+    set -e
+    if [ "$rc" != "0" ]; then
+        die "④ 基礎年金 が異常終了しました（終了コード $rc、予備番号 $1、カット率固定 $2）"
+    fi
+}
 
 step "④ 基礎年金 を実行（マクロ経済スライドの調整終了年度を解く）"
 : > "$SUURI/bas/rslt/output.csv"
-cd "$SUURI/bas" && "$SUURI/bas/exec/ver0000.out" \
-    "$SUURI/bas/io_file/infile.csv" "$SUURI/bas/io_file/outfile.csv" \
-    "$SHISAN" "$SHISAN" "$ECON" "$WAKU" "$WAKU" "$YOBI" 0 1 0 0 2031 3 0 0 0 \
-    | grep -E "終了年度|カット率|給付率|代替率換算" || true
+run_bas "$YOBI" 0
 
 # 基礎年金が出したカット率ファイルを収支計算が読む場所へ渡す
 cp "$SUURI/bas/rslt/cuta-$SHISAN-$SHISAN-$ECON-$WAKU-1120-$YOBI.csv" \
    "$SUURI/emp/rslt/ez_arev/cutr/"
+
+# ⑤の標準入力。条件付きで増える2つに注意（収支計算/cntl.c:109-112, 161-164）
+#   Flg_Sigo==1 → 続けて waku-m の外枠番号を聞かれる
+#   Touitu >=1  → 続けて統一カット率の予備番号を聞かれる
+emp_stdin() {
+    printf '0\n8\n%s\n%s\n' "$KAKUDAI" "$SIGO"
+    if [ "$SIGO" = 1 ]; then printf '%s\n' "$WAKU_M"; fi
+    printf '%s\n%s\n' "$HOUJOU" "$TOUGOU"
+    if [ "$TOUGOU" -ge 1 ]; then printf '%s\n' "$YOBI2"; fi
+    printf '%s\n%s\n' "$((1 - CARRY))" "$DMACRO"
+    printf '%s\n%s\n%s\n%s\n' "$SHISAN" "$ECON" "$WAKU" "$YOBI"
+}
 
 step "⑤ 厚生年金 収支計算 を実行（所得代替率）"
 # grep をパイプで挟むと終了状態が隠れるので PIPESTATUS で本体の結果を見る
 # （ここを素通しにしていたため、⑤が buffer overflow で落ちても「完了」と
 #  表示してしまっていた）
 cd "$SUURI/emp" && set +e
-printf "0\n8\n%s\n%s\n0\n0\n0\n0\n%s\n%s\n%s\n%s\n" \
-    "$KAKUDAI" "$SIGO" "$SHISAN" "$ECON" "$WAKU" "$YOBI" | "$SUURI/emp/exec/asys20" \
-    | grep -A 4 "最終代替率"
+emp_stdin | "$SUURI/emp/exec/asys20" | grep -A 4 "最終代替率"
 rc=${PIPESTATUS[1]}
 set -e
 if [ "$rc" != "0" ]; then
@@ -213,5 +325,17 @@ if [ "$rc" != "0" ]; then
     exit "$rc"
 fi
 
+if [ "$TOUGOU" = 1 ]; then
+    step "④ 基礎年金 を再実行（⑤が出した統一カット率 予備$YOBI2 を読む）"
+    run_bas "$YOBI2" 1
+fi
+
 echo
-echo "############ 完了（試算番号 $SHISAN / 経済前提 $ECON / 外枠 $WAKU / 予備 $YOBI / 適用拡大 $KAKUDAI） ############"
+echo "############ 完了 ############"
+printf '  番号   試算 %s / 経済前提 %s / 外枠 %s / 予備 %s' \
+    "$SHISAN" "$ECON" "$WAKU" "$YOBI"
+if [ "$TOUGOU" = 1 ]; then printf ' (+%s)' "$YOBI2"; fi
+echo
+echo "  人口   出生 $JIN / 死亡 $QX / 入国超過 $NC / 労働力率 $ROUDR"
+echo "  レバー 適用拡大 $KAKUDAI / 45年化 $SIGO / 高在老撤廃 $KOZAX / 報酬上限 $HOUJOU"
+echo "         調整期間一致 $TOUGOU / 名目下限撤廃 $DMACRO / キャリーオーバー $CARRY"
