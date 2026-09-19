@@ -71,8 +71,6 @@ MAN = 1e-4            # 円 → 万円
 UNIFIED_SHEET = '国年年金及び厚年年金'
 
 # 公表シートの列番号。(項目名, 列) で、本体は FIRST_ROW 行から。
-# 「年度末積立金(2024年度価格)」は導出列で換算率が未特定なので照合しない
-# （仕様書 §15.0.2・付録B）。
 UNIFIED_PLAN = {
     'sheet': UNIFIED_SHEET,
     'first_row': 18,
@@ -81,6 +79,7 @@ UNIFIED_PLAN = {
              ('国庫負担', 6), ('運用収入', 7), ('その他収入', 8),
              ('支出合計', 9), ('基礎年金', 10), ('報酬比例', 11),
              ('その他支出', 12), ('収支差引残', 13), ('年度末積立金', 14),
+             ('年度末積立金(2024価格)', 15),
              ('積立度合', 16), ('標準報酬総額', 17),
              ('所得代替率', 19), ('代替率(基礎)', 20), ('代替率(比例)', 21),
              ('手取り収入', 22), ('年金額', 23),
@@ -90,7 +89,8 @@ UNIFIED_PLAN = {
 BYSYS_COLS_MONEY = [('収入合計', 3), ('保険料収入', 4), ('国庫負担', 5),
                     ('運用収入', 6), ('その他収入', 7), ('支出合計', 8),
                     ('給付費', 9), ('基礎年金拠出金', 10), ('その他支出', 11),
-                    ('収支差引残', 12), ('年度末積立金', 13), ('積立度合', 15)]
+                    ('収支差引残', 12), ('年度末積立金', 13),
+                    ('年度末積立金(2024価格)', 14), ('積立度合', 15)]
 BYSYS_COLS_RATE = [('所得代替率', 18), ('代替率(基礎)', 19), ('代替率(比例)', 20),
                    ('手取り収入', 21), ('年金額', 22),
                    ('年金額(基礎)', 23), ('年金額(比例)', 24)]
@@ -234,6 +234,22 @@ def read_emp(ver, yobi, shushi_dir):
     return out
 
 
+def read_kakaku(ver, bas_yobi, bas_dir):
+    """④ kekka の「保険料改定率」列＝2004年度価格への換算率 kakaku[]。
+
+    公表の「2024年度価格」欄は名目額に kakaku[2024] / kakaku[k] を掛けたもの。
+    kakaku は 2004年度を1として名目賃金上昇率を積み上げ、2025年度
+    （MARUME_NENDO）で小数3桁に丸める（基礎年金/econ.c:312-375）ので、
+    kakaku[2024] = 0.999、kakaku[2025] = 1.030 になる。
+    掲載表の「2024年度価格」で1年目だけ 1.031 ではなく
+    1030/999 = 1.031031031… が使われていたのは、この
+    kakaku[2025] / kakaku[2024] そのもの（仕様書 §15.0.2・付録B）。
+    """
+    p = find_one(f'kekka{ver}-1120-{bas_yobi}a.csv', bas_dir)
+    return {y: float(r['保険料改定率'])
+            for y, r in read_block(p, '収支見通し', 2, 0).items()}
+
+
 def read_nat(ver, bas_yobi, bas_dir):
     """④ kekka の国民年金収支。単位は兆円。"""
     p = find_one(f'kekka{ver}-1120-{bas_yobi}a.csv', bas_dir)
@@ -322,7 +338,16 @@ def read_provide(ver, yobi, bas_dir):
 
 # ---------------------------------------------------------------- 組み立て
 
-def build(layout, emp, nat, rate, X):
+def deflate(nominal, kakaku):
+    """名目額を2024年度価格へ。係数は kakaku[2024] / kakaku[k]。"""
+    base = kakaku.get(2024)
+    if base is None:
+        return {}
+    return {y: v * base / kakaku[y] for y, v in nominal.items()
+            if kakaku.get(y)}
+
+
+def build(layout, emp, nat, rate, X, kakaku):
     """公表のレイアウトに合わせてこちら側の系列を作る。"""
     if layout == '制度別':
         got = {'厚生年金': {}, '国民年金': {}}
@@ -339,6 +364,9 @@ def build(layout, emp, nat, rate, X):
         got['国民年金']['給付費'] = {y: v['給付費'] for y, v in nat.items()}
         got['国民年金']['その他支出'] = {y: v['その他支出']
                                          for y, v in nat.items()}
+        for sn in got:
+            got[sn]['年度末積立金(2024価格)'] = deflate(
+                got[sn]['年度末積立金'], kakaku)
         for sn in got:
             for label in ('所得代替率', '代替率(基礎)', '代替率(比例)',
                           '手取り収入', '年金額', '年金額(基礎)', '年金額(比例)'):
@@ -364,6 +392,7 @@ def build(layout, emp, nat, rate, X):
                        for y, v in emp.items() if y in nat}
     u['報酬比例'] = {y: v['独自給付'] + X.get(y, 0.0) for y, v in emp.items()}
     u['その他支出'] = {y: v['事務費'] - X.get(y, 0.0) for y, v in emp.items()}
+    u['年度末積立金(2024価格)'] = deflate(u['年度末積立金'], kakaku)
     for label in ('所得代替率', '代替率(基礎)', '代替率(比例)',
                   '手取り収入', '年金額', '年金額(基礎)', '年金額(比例)'):
         u[label] = {y: v[label] for y, v in rate.items()}
@@ -484,7 +513,8 @@ def main():
     nat = read_nat(ver, bas_yobi, bas)
     rate = read_rate(ver, args.yobi, shushi)
     X = read_provide(ver, args.yobi, bas) if pub['layout'] == '一元化' else {}
-    got = build(pub['layout'], emp, nat, rate, X)
+    kakaku = read_kakaku(ver, bas_yobi, bas)
+    got = build(pub['layout'], emp, nat, rate, X, kakaku)
     return compare(pub, got, rate, args.tol, args.atol, args.show)
 
 

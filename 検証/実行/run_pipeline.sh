@@ -19,6 +19,10 @@
 #   WAKU    外枠番号     既定: 第1引数
 #   YOBI    予備番号     既定: 000
 #   SKIP_BUILD=1  ビルドを飛ばす（同じビルドを使い回す）
+#   STEPS         流す工程。既定 12345（①〜⑤全部）
+#                 例 STEPS=25 なら②給付費推計と⑤収支計算だけ流す。
+#                 高在老撤廃・標準報酬上限のように公表値が基礎年金側を
+#                 通常試算のまま据え置いているオプションで使う（後述）。
 #
 # -----------------------------------------------------------------------------
 # オプション試算のレバー（既定は全部0＝通常試算）
@@ -57,6 +61,30 @@
 #   ⑤     Touitu=1     基礎と比例を一括で均衡させ、統一カット率を
 #                      cuta/cutb-…-1120-{YOBI2}.csv に書く
 #   2周目 CUT_KOTEI=1  その統一カット率を読んで基礎年金の見通しを作り直す
+#
+# -----------------------------------------------------------------------------
+# KOZAX・HOUJOU は基礎年金側を据え置く（STEPS=25）
+# -----------------------------------------------------------------------------
+# 65歳以上の在職老齢年金の撤廃と標準報酬月額の上限の見直しは、どちらも
+# 報酬比例の支給停止・保険料にしか効かないので、基礎年金の財政は動かない。
+# 公表値（詳細結果等2 の 25〜28）も基礎年金側が**通常試算と1ビット違わない**。
+#
+#   No.03（通常）と No.25（高在老撤廃）の比較
+#     国民年金シート    全項目の相対差 0
+#     厚生年金シート    保険料収入・その他収入・その他支出・標準報酬総額・
+#                       基礎年金拠出金 の相対差 0、給付費以降だけ動く
+#
+# ところが②は flg_kozax を立てると kiso.* の中身がわずかに変わる（老在を
+# 老退として扱う分の副作用）。そのまま③④を流すと基礎年金のカット率が
+# 1e-7 ほどずれて、公表値と合わなくなる。公表値を再現するには、
+# **③④を通常試算のまま据え置いて、②と⑤だけ流し直す**。
+#
+#   検証/実行/run_pipeline.sh 3003 1 1 0 2                       # 通常試算
+#   KOZAX=1 STEPS=25 SKIP_BUILD=1 \
+#       検証/実行/run_pipeline.sh 3003 1 1 0 2                   # 公表 No.25
+#
+# TOUGOU・DMACRO・CARRY は基礎年金側も動く（公表値もそうなっている）ので、
+# ①〜⑤を通しで流す。
 #
 #   SUURI_PREFIX  実行領域の置き場所。既定は <リポジトリ>/work
 #                 （root 権限が要らないので、ローカルでもそのまま動く）
@@ -108,6 +136,7 @@ DMACRO="${DMACRO:-0}"
 CARRY="${CARRY:-1}"
 WAKU_M="${WAKU_M:-$WAKU}"
 YOBI2="${YOBI2:-001}"
+STEPS="${STEPS:-12345}"
 
 die() { echo "★ $*" >&2; exit 1; }
 chk() { # chk 変数名 値 許される値...
@@ -156,6 +185,7 @@ BUILD="${BUILD_DIR:-/tmp/nenkin-build}"
 . "$HERE/suuri_env.sh"
 
 step() { echo; echo "############ $* ############"; }
+run_step() { case "$STEPS" in *"$1"*) return 0 ;; *) return 1 ;; esac; }
 
 # --------------------------------------------------------------- 準備
 if [ "${SKIP_BUILD:-0}" != "1" ]; then
@@ -251,11 +281,14 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
 fi
 
 # --------------------------------------------------------------- 実行
+if run_step 1; then
 step "① 被保険者推計 を実行（外枠 $WAKU / 適用拡大 $KAKUDAI / 45年化 $SIGO）"
 cd "$SUURI/wakuc" && printf "%s\n%s\n%s\n%s\n%s\n%s\n%s\n" \
     "$WAKU" "$KAKUDAI" "$SIGO" "$JIN" "$QX" "$NC" "$ROUDR" \
     | "$SUURI/wakuc/exec/wakuc_4_1" > /dev/null
+fi
 
+if run_step 2; then
 step "② 厚生年金 給付費推計 を実行（厚年＋共済3制度）"
 # 入力順は main.cpp（key, 試算番号, 経済前提, 外枠）→ cntl.cpp（seimei,
 # flg_part, flg_sigo, flg_kozax, houjou, flg_inout）の計10個。
@@ -264,12 +297,15 @@ cd "$SUURI/emp" && printf "11\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n" \
     "$SHISAN" "$ECON" "$WAKU" "$SEIMEI" \
     "$KAKUDAI" "$SIGO" "$KOZAX" "$HOUJOU" "$((ROUDR-1))" \
     | "$SUURI/emp/exec/usys20" > /dev/null
+fi
 
+if run_step 3; then
 step "③ 国民年金 を実行"
 cd "$SUURI/nat" && "$SUURI/nat/exec/ver0000.out" \
     "$SUURI/nat/io_file/infile.csv" "$SUURI/nat/io_file/outfile.csv" \
     "$SHISAN" "$ECON" "$WAKU" "$BIRTHFILE" "$DEATH" 0 1 "$KAKUDAI" 2027 0 2031 3 "$WAKU" \
     > /dev/null
+fi
 
 # ④ 基礎年金（引数17個。順番は原本の jikko_bas.sh と cntl.c:28-60）
 #   argv: infile outfile 厚年番号 国年番号 経済前提 外枠 外枠(カット用) 予備
@@ -291,6 +327,7 @@ run_bas() {   # run_bas <予備番号> <カット率固定 0/1>
     fi
 }
 
+if run_step 4; then
 step "④ 基礎年金 を実行（マクロ経済スライドの調整終了年度を解く）"
 : > "$SUURI/bas/rslt/output.csv"
 run_bas "$YOBI" 0
@@ -298,6 +335,7 @@ run_bas "$YOBI" 0
 # 基礎年金が出したカット率ファイルを収支計算が読む場所へ渡す
 cp "$SUURI/bas/rslt/cuta-$SHISAN-$SHISAN-$ECON-$WAKU-1120-$YOBI.csv" \
    "$SUURI/emp/rslt/ez_arev/cutr/"
+fi
 
 # ⑤の標準入力。条件付きで増える2つに注意（収支計算/cntl.c:109-112, 161-164）
 #   Flg_Sigo==1 → 続けて waku-m の外枠番号を聞かれる
@@ -311,6 +349,7 @@ emp_stdin() {
     printf '%s\n%s\n%s\n%s\n' "$SHISAN" "$ECON" "$WAKU" "$YOBI"
 }
 
+if run_step 5; then
 step "⑤ 厚生年金 収支計算 を実行（所得代替率）"
 # grep をパイプで挟むと終了状態が隠れるので PIPESTATUS で本体の結果を見る
 # （ここを素通しにしていたため、⑤が buffer overflow で落ちても「完了」と
@@ -325,9 +364,10 @@ if [ "$rc" != "0" ]; then
     exit "$rc"
 fi
 
-if [ "$TOUGOU" = 1 ]; then
+if [ "$TOUGOU" = 1 ] && run_step 4; then
     step "④ 基礎年金 を再実行（⑤が出した統一カット率 予備$YOBI2 を読む）"
     run_bas "$YOBI2" 1
+fi
 fi
 
 echo
@@ -337,5 +377,6 @@ printf '  番号   試算 %s / 経済前提 %s / 外枠 %s / 予備 %s' \
 if [ "$TOUGOU" = 1 ]; then printf ' (+%s)' "$YOBI2"; fi
 echo
 echo "  人口   出生 $JIN / 死亡 $QX / 入国超過 $NC / 労働力率 $ROUDR"
+echo "  工程   $STEPS"
 echo "  レバー 適用拡大 $KAKUDAI / 45年化 $SIGO / 高在老撤廃 $KOZAX / 報酬上限 $HOUJOU"
 echo "         調整期間一致 $TOUGOU / 名目下限撤廃 $DMACRO / キャリーオーバー $CARRY"
