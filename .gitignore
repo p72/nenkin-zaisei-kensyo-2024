@@ -8,3 +8,8 @@ core
 # OS
 Thumbs.db
 .DS_Store
+
+# Python / pytest
+__pycache__/
+*.pyc
+.pytest_cache/
