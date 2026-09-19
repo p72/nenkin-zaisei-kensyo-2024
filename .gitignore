@@ -1,0 +1,10 @@
+# ビルド生成物
+*.o
+*.out
+*.dbg
+.bak/
+core
+
+# OS
+Thumbs.db
+.DS_Store
