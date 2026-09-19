@@ -48,12 +48,17 @@ step() { echo; echo "############ $* ############"; }
 
 # --------------------------------------------------------------- 準備
 if [ "${SKIP_BUILD:-0}" != "1" ]; then
-    step "ソースを UTF-8 に変換してビルドツリーへ"
+    # 文字コードは EUC-JP だが、丸数字（①②③④）が NEC特殊文字として
+    # 入っているため標準の EUC-JP では変換に失敗する（被保険者推計/cntl.c、
+    # 収支計算/shus_out.c、収支計算/shus_fullout.c の3本）。NEC/IBM拡張を
+    # 含む EUCJP-MS を使うと全ファイルきれいに通り、実行時の日本語出力も
+    # 読める形になる。
+    step "ソースを UTF-8 に変換してビルドツリーへ（EUCJP-MS）"
     rm -rf "$BUILD"; mkdir -p "$BUILD"
     cd "$SRC"
     find . -type f | while read -r f; do
         mkdir -p "$BUILD/$(dirname "$f")"
-        iconv -f EUC-JP -t UTF-8 "$f" > "$BUILD/$f" 2>/dev/null || cp "$f" "$BUILD/$f"
+        iconv -f EUCJP-MS -t UTF-8 "$f" > "$BUILD/$f" 2>/dev/null || cp "$f" "$BUILD/$f"
     done
 
     step "移植パッチを適用（glibc 移植性、4箇所）"

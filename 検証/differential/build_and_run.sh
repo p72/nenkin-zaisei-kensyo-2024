@@ -1,7 +1,8 @@
 #!/bin/sh
 # 原本の 国民年金/econ.c を無修正でビルドし、指定の経済前提ファイルで走らせる。
 #
-# 原本は EUC-JP なので UTF-8 に変換したコピーをビルドディレクトリに作る。
+# 原本は EUC-JP（丸数字が NEC特殊文字で入っているため EUCJP-MS を使う）。
+# UTF-8 に変換したコピーをビルドディレクトリに作る。
 # 変換は iconv による機械的なものだけで、コードには一切手を入れない。
 # リポジトリ内の原本は読み取りのみ。
 set -e
@@ -16,12 +17,12 @@ mkdir -p "$BUILD"
 # 原本を UTF-8 に変換してコピー（内容の書き換えはしない）
 for f in econ.c stdfm.c snaps.h mecon.h mseid.h mcntl.h mfile_open.h \
          mkisoritu.h mkisosu.h option.h; do
-    iconv -f EUC-JP -t UTF-8 "$SRC/$f" > "$BUILD/$f"
+    iconv -f EUCJP-MS -t UTF-8 "$SRC/$f" > "$BUILD/$f"
 done
 cp "$(dirname "$0")/harness.cpp" "$BUILD/"
 
 # 経済前提ファイルも UTF-8 に（数値とカンマのみなので実質そのまま）
-iconv -f EUC-JP -t UTF-8 "$ECON" > "$BUILD/econ_input.csv"
+iconv -f EUCJP-MS -t UTF-8 "$ECON" > "$BUILD/econ_input.csv"
 
 cd "$BUILD"
 # 原本の snaps.h / stdfm.c が宣言する fdiv() は、新しい glibc の C23 縮小演算

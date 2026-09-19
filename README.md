@@ -91,8 +91,13 @@ papers/001365945/
 
 ソースは **EUC-JP**（Solaris/UNIX由来）。そのまま開くと文字化けします。
 
+ただし丸数字（①②③④）が **NEC特殊文字**として入っているため、標準の
+`EUC-JP` では3本のファイルで変換に失敗します（`被保険者推計/cntl.c`、
+`収支計算/shus_out.c`、`収支計算/shus_fullout.c`）。NEC/IBM拡張を含む
+**`EUCJP-MS`** を指定してください。
+
 ```bash
-iconv -f EUC-JP -t UTF-8 papers/001365945/プログラム/国民年金/main.c
+iconv -f EUCJP-MS -t UTF-8 papers/001365945/プログラム/国民年金/main.c
 ```
 
 `.gitattributes` で `* -text` を指定し、改行・テキスト正規化を無効化して
