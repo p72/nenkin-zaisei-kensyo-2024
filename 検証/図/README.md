@@ -111,3 +111,11 @@ python3 検証/図/make_zaisei_hyou.py --case 3003 --yobi 010 --bas-yobi 011 \
 
 「その他収入」「その他支出」の列は公表資料と同じく省いてあるので、内訳の和は
 合計に一致しません（注4）。
+
+---
+
+**非公式の再現です。** 厚生労働省が作成・承認したものではありません。
+出典：「令和6(2024)年財政検証」（厚生労働省）
+<https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/nenkin/nenkin/zaisei-kensyo/index.html>
+の計算プログラム（資料001365945）および公表データを加工して作成。
+ライセンス・免責はリポジトリ直下の [LICENSE](../../LICENSE) を参照してください。

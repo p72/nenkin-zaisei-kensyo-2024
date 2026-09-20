@@ -128,3 +128,11 @@ SUURI_PREFIX=/ python3 検証/数式編/verify_shikihen.py
 ```
 
 `verify_bunpu_func.py` はソースを読むだけなので通し実行は不要です。
+
+---
+
+**非公式の再現です。** 厚生労働省が作成・承認したものではありません。
+出典：「令和6(2024)年財政検証」（厚生労働省）
+<https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/nenkin/nenkin/zaisei-kensyo/index.html>
+の計算プログラム（資料001365945）および公表データを加工して作成。
+ライセンス・免責はリポジトリ直下の [LICENSE](../../LICENSE) を参照してください。

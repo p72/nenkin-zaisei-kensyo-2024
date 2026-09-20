@@ -53,6 +53,7 @@ RULE   = '#0b0b0b'
 RULE_2 = '#b8b6b0'
 SURF   = '#ffffff'
 BAND   = '#f4f3f0'
+C_WARN = '#c2410c'
 
 # ケース名（経済前提番号 → 表記）
 CASES = {
@@ -147,6 +148,11 @@ def draw(got, side, title, subtitle, layout, out, years=YEARS):
             va='center', fontweight='bold')
     ax.text(0.5, 0.925, '（令和6(2024)年財政検証）', fontsize=13.5, color=INK,
             ha='center', va='center')
+    # PDL1.0「国が作成したかのような態様で公表・利用してはいけません」への対応。
+    # 公表資料と体裁が同じなので、非公式であることを表の中に必ず入れる。
+    ax.text(0.5, 0.893, '非公式の再現 — 厚生労働省が作成したものではありません',
+            fontsize=11, color=C_WARN, ha='center', va='center',
+            fontweight='bold')
     for i, s in enumerate(subtitle):
         ax.text(0.045, 0.882 - i * 0.030, s, fontsize=13, color=INK, va='center')
 
@@ -154,7 +160,7 @@ def draw(got, side, title, subtitle, layout, out, years=YEARS):
     L, R = 0.035, 0.715
     TOP = 0.800
     HDR = 0.115                            # 見出し4段ぶんの高さ
-    BOT = 0.092
+    BOT = 0.100
     rowh = (TOP - HDR - BOT) / nr
     w_year = (R - L) * 0.052
     w = (R - L - w_year) / (nc - 1)
@@ -304,6 +310,8 @@ def draw(got, side, title, subtitle, layout, out, years=YEARS):
 
     # ---- 注記
     notes = [
+        '(注0) 本表は第三者が公開プログラムを実行して作成した非公式の再現であり、'
+        '厚生労働省が作成・承認したものではない。公表値と食い違う場合は公表値が正。',
         '(注1) 存続厚生年金基金の代行部分を含む。' +
         ('厚生年金全体の財政見通しである。' if layout == '厚生年金'
          else '国民年金と厚生年金を合わせた財政見通しである。'),
@@ -312,11 +320,12 @@ def draw(got, side, title, subtitle, layout, out, years=YEARS):
         '(注3) 「積立度合」は、前年度末積立金の当年度の支出合計に対する倍率。',
         '(注4) 「報酬比例」には厚生年金の独自給付（定額、加給、加算）を含む。'
         '「その他収入」「その他支出」は列を省いているので、内訳の和は合計に一致しない。',
-        '(注5) 厚生労働省「令和6(2024)年財政検証結果」の計算プログラム'
-        '（資料001365945）を実行して作成。経済成長率のみ公表資料の値。',
+        '(注5) 「令和6(2024)年財政検証」（厚生労働省）'
+        'https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/nenkin/nenkin/zaisei-kensyo/index.html'
+        ' の計算プログラム（資料001365945）を加工して作成。経済成長率のみ公表資料の値。',
     ]
     for i, s in enumerate(notes):
-        ax.text(0.035, 0.068 - i * 0.0130, s, fontsize=8.4, color=INK_3,
+        ax.text(0.035, 0.074 - i * 0.0126, s, fontsize=8.2, color=INK_3,
                 va='center')
 
     fig.savefig(out, facecolor=SURF)

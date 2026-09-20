@@ -162,6 +162,10 @@ def chart(A, B, out):
              '厚生労働省 令和6(2024)年財政検証の計算プログラムをそのまま実行。'
              '所得代替率は公表値と15桁一致。',
              fontsize=11, color=INK_3, va='top')
+    # PDL1.0 の「国が作成したかのような態様で公表・利用してはいけません」への対応
+    fig.text(0.985, 0.965, '非公式の再現\n厚生労働省が作成したものではありません',
+             fontsize=10, color=C_WARN, ha='right', va='top', fontweight='bold',
+             linespacing=1.3)
 
     # ---- (a) 所得代替率の推移
     ax = fig.add_subplot(gs[:, 0])
@@ -271,7 +275,9 @@ def chart(A, B, out):
     ax.tick_params(colors=INK_2, labelsize=11, length=0)
 
     fig.text(0.052, 0.024,
-             '出典：厚生労働省「令和6(2024)年財政検証結果」計算プログラム（資料001365945）を実行。'
+             '「令和6(2024)年財政検証」（厚生労働省）'
+             'https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/nenkin/nenkin/zaisei-kensyo/index.html'
+             ' の計算プログラム（資料001365945）を加工して作成。'
              '公表値は詳細結果等1 No.03・詳細結果等2 No.23。',
              fontsize=9.5, color=INK_3)
     fig.savefig(out, facecolor=SURFACE)
@@ -356,6 +362,8 @@ def table(A, B, times, out):
             '公表値（詳細結果等1 No.03／詳細結果等2 No.23）と、'
             'こちらの実行結果。金額は実質<対物価>。',
             fontsize=10.5, color=INK_2, va='center')
+    ax.text(0.972, 1 - 0.55 * H, '非公式の再現',
+            fontsize=12, color=C_WARN, ha='right', va='center', fontweight='bold')
 
     hdr = ('指標', '通常試算', '調整期間の一致', '差')
     for xi, h in zip(x, hdr):
@@ -384,9 +392,10 @@ def table(A, B, times, out):
         yy -= H
 
     ax.text(0.038, yy + 0.25 * H,
-            '出典：厚生労働省「令和6(2024)年財政検証結果」計算プログラム（資料001365945）を実行。'
-            '計算時間は 4 vCPU（Intel Xeon 2.10GHz）・メモリ15GB の Linux コンテナ、'
-            'gcc -O2 / g++ -Ofast、シングルスレッド。',
+            '本表は第三者が「令和6(2024)年財政検証」（厚生労働省）の計算プログラム'
+            '（資料001365945）を加工して作成した非公式の再現であり、厚生労働省が'
+            '作成・承認したものではない。計算時間は 4 vCPU（Intel Xeon 2.10GHz）・'
+            'メモリ15GB の Linux コンテナ、gcc -O2 / g++ -Ofast、シングルスレッド。',
             fontsize=9.5, color=INK_3, va='top')
     fig.savefig(out, facecolor=SURFACE)
     plt.close(fig)

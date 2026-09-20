@@ -226,3 +226,11 @@ kakaku[2025] / kakaku[2024] = 1.030 / 0.999 = 1.031031031031031
 `SUURI_PREFIX` で決まり、既定は `<リポジトリ>/work/suuri/rev2024` です
 （`検証/suuri_env.py`、仕様書 §12.1）。`--shushi-dir`・`--bas-dir` で個別に
 指定することもできます。
+
+---
+
+**非公式の再現です。** 厚生労働省が作成・承認したものではありません。
+出典：「令和6(2024)年財政検証」（厚生労働省）
+<https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/nenkin/nenkin/zaisei-kensyo/index.html>
+の計算プログラム（資料001365945）および公表データを加工して作成。
+ライセンス・免責はリポジトリ直下の [LICENSE](../../LICENSE) を参照してください。

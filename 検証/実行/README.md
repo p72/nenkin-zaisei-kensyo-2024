@@ -166,3 +166,11 @@ SUURI_PREFIX=/mnt/d 検証/実行/run_pipeline.sh 3001
 
 `SUURI_PREFIX` に `|` `&` `\` は使えません（`sed` の区切りと衝突するため、
 スクリプトが弾きます）。
+
+---
+
+**非公式の再現です。** 厚生労働省が作成・承認したものではありません。
+出典：「令和6(2024)年財政検証」（厚生労働省）
+<https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/nenkin/nenkin/zaisei-kensyo/index.html>
+の計算プログラム（資料001365945）および公表データを加工して作成。
+ライセンス・免責はリポジトリ直下の [LICENSE](../../LICENSE) を参照してください。

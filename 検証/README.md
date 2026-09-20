@@ -61,3 +61,11 @@ $ 検証/differential/run_all.sh
 いない。公表値と突き合わせるときだけ、原本から読み取った調整率
 （2023年度 0.994、2024年度 0.996）を `extra_macro` として渡している。
 差分テストは `extra_macro` を渡さず、原本と同じ条件で回す。
+
+---
+
+**非公式の再現です。** 厚生労働省が作成・承認したものではありません。
+出典：「令和6(2024)年財政検証」（厚生労働省）
+<https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/nenkin/nenkin/zaisei-kensyo/index.html>
+の計算プログラム（資料001365945）および公表データを加工して作成。
+ライセンス・免責はリポジトリ直下の [LICENSE](../LICENSE) を参照してください。
