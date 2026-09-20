@@ -40,8 +40,8 @@
 ## 3分で動かす
 
 ```bash
-git clone <このリポジトリ>
-cd 0919nenkin
+git clone https://github.com/p72/nenkin-zaisei-kensyo-2024.git
+cd nenkin-zaisei-kensyo-2024
 
 ./fetch.sh                        # 厚労省の公表資料を取得（約82MB、SHA256照合）
 検証/実行/run_pipeline.sh 3001    # 高成長実現ケースを通しで計算（2分35秒）
