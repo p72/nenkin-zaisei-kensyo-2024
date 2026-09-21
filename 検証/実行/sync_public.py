@@ -68,10 +68,12 @@ import sys
 
 # 公開側に写さないもの（先頭一致）
 #
-# `papers/`   公開側は同梱せず `fetch.sh` で取得する方針
-# `CLAUDE.md` 非公開側での作業の約束。`papers/` も `work/` も無い公開側では
-#             内容が成り立たないので写さない
-EXCLUDE = ("papers/", "CLAUDE.md")
+# `papers/`       公開側は同梱せず `fetch.sh` で取得する方針
+# `CLAUDE.md`     非公開側での作業の約束。`papers/` も `work/` も無い公開側では
+#                 内容が成り立たないので写さない
+# `検証/高速版/`  高速版（数式モデル実装）の計画と作業場。承認・完成するまで
+#                 公開しない
+EXCLUDE = ("papers/", "CLAUDE.md", "検証/高速版/")
 
 # 写す前の検査。実コーパスで誤検出0を確認したパターン。
 # 40桁hex は e-Stat の APP ID の形。`fetch.sh` の SHA256 は64桁なので

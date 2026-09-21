@@ -53,6 +53,11 @@ $ 検証/differential/run_all.sh
 - `kaiteiritu_make_before` / `kaiteiritu_make`
 - `round` / `kaiteiritu_marume` / `pension_marume` / `marume_hantei`
 
+**同じプログラムを Python に移植した先行研究**（厚労科研の分担研究報告書、
+川出ほか 2026）との比較は [`先行研究との比較.md`](先行研究との比較.md) に
+ある。報告書が浮動小数点の累積誤差とする差を、原本のコンパイル指定を
+変えて実測した（`実行/nat_build_flags.py`）。
+
 **6システム全部の移植は [`移植/`](移植/README.md) にある。**
 ①被保険者推計・②厚生年金給付費推計・③国民年金・④基礎年金・
 ⑤厚生年金収支計算・⑥分布推計、Python 153本・46,314行で、
