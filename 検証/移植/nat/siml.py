@@ -845,64 +845,73 @@ def siml(G, nendo, shubetu):
                         Nendomatu_Tyousei_Keisu(G, nendo, nenrei)
 
     # ---- 障害の年度末 ----------------------------------------------
+    #
+    # 原本は 等級(2) × 年齢(95) × 3配列 の二重ループ。読むのは前年度
+    # `[y-1, n-1, t]` と自分のマス、書くのは当年度 `[y, n, t]` なので
+    # 両軸をまとめる（`str_op.scalar_arr` の解説）。等級は 1・2 だけ使う
+    # （添字 0 は使わない）のでスライスは連続でないが、view は itemsize が
+    # 変わらないので通る（1個ずつ版と配列全体で一致することを実測した）。
+    NS = MAX_SHOGAI_JUKYU - MIN_SHOGAI_JUKYU + 1             # 96
+    T = slice(1, SHOGAI_TOKYU)                               # 等級 1・2
+    nenreis = np.arange(MIN_SHOGAI_JUKYU + 1, MAX_SHOGAI_JUKYU + 1)
+    kt_v = G.kaiteiritu_tannen[nendo - ECON_SHONENDO, nenreis][:, None, None]
+    zan_ip = (1. - G.Shikkenritu_Ippan[sotai_nendo, 1:NS])[:, None, None]
+    zan_20 = (1. - G.Shikkenritu_20mae[sotai_nendo, 1:NS])[:, None, None]
+    _s1 = np.empty((NS - 1, SHOGAI_TOKYU - 1), dtype=SD)
+    _s2 = np.empty((NS - 1, SHOGAI_TOKYU - 1), dtype=SD)
+    A_ip = G.Shogai_Ippan_Nendomatu
+    A_20 = G.Shogai_20mae_Nendomatu
+    A_ky = G.Shogai_Kyu_Nendomatu
+
+    # `add(adjustbenefit(kt, scalar(1 - 失権率, 前年度)), 新規)` の3段を
+    # 同じ順で当てる。`adjustbenefit` は素通しの欄を写し戻すので
+    # in-place にできず、控えを2枚使う
+    scalar_arr(zan_ip, A_ip[sotai_nendo - 1, :NS - 1, T], _s1)
+    adjustbenefit_arr(kt_v, _s1, _s2)
+    add_arr(_s2, Shogai_Ippan_Shinki[1:NS, T], A_ip[sotai_nendo, 1:NS, T])
+
+    scalar_arr(zan_20, A_20[sotai_nendo - 1, :NS - 1, T], _s1)
+    adjustbenefit_arr(kt_v, _s1, _s2)
+    add_arr(_s2, Shogai_20mae_Shinki[1:NS, T], A_20[sotai_nendo, 1:NS, T])
+
+    # 旧法は**一般の失権率**を使う（原本のとおり）。新規は足さない
+    scalar_arr(zan_ip, A_ky[sotai_nendo - 1, :NS - 1, T], _s1)
+    adjustbenefit_arr(kt_v, _s1, A_ky[sotai_nendo, 1:NS, T])
+
+    # 加給は 人数 × (単価12歳未満 × 割合 + 単価3歳以降 × 割合)。要素ごとで
+    # 掛ける順・足す順は原本のまま。年齢で決まる量は (95, 1) で等級へ放送
+    # する。`cur_*` は view なので欄への代入が元に伝わる
+    k12 = G.Kakyu_Tanka_12shi[sotai_nendo, nenreis][:, None]
+    k3 = G.Kakyu_Tanka_3shiiko[sotai_nendo, nenreis][:, None]
+    w_ip = (k12 * G.Kakyu_Wariai_Ippan_12shi[sotai_nendo, 1:NS][:, None]
+            + k3 * G.Kakyu_Wariai_Ippan_3shiiko[sotai_nendo, 1:NS][:, None])
+    w_20 = (k12 * G.Kakyu_Wariai_20mae_12shi[sotai_nendo, 1:NS][:, None]
+            + k3 * G.Kakyu_Wariai_20mae_3shiiko[sotai_nendo, 1:NS][:, None])
+    cur_ip = A_ip[sotai_nendo, 1:NS, T]
+    cur_20 = A_20[sotai_nendo, 1:NS, T]
+    cur_ky = A_ky[sotai_nendo, 1:NS, T]
+    cur_ip["kakyu"] = cur_ip["ninzu"] * w_ip
+    cur_20["kakyu"] = cur_20["ninzu"] * w_20
+
+    # 旧法の加算は**一般の加算割合**を使う（原本のとおり）。原本の
+    # `min(Temp, kakyu)` は Python の `min` で、`kakyu` が**厳密に**小さい
+    # ときだけ `kakyu`、等しい・NaN のときは `Temp` を返す。`np.minimum`
+    # は NaN と ±0 の扱いが違うので、`np.where` で同じ規則にする
+    temp_ky = cur_ky["ninzu"] * w_ip
+    kk = cur_ky["kakyu"]
+    cur_ky["kakyu"] = np.where(kk < temp_ky, kk, temp_ky)
+
+    # 免除の加算は前年度の加算に対する比で按分。前年度の加算が 0 なら 0。
+    # `(kakyu * zen.menjo_kakyu) / zen.kakyu` の順は原本のまま。0 割りは
+    # マスクで捨てるので警告だけ黙らせる
+    zen = A_ky[sotai_nendo - 1, :NS - 1, T]
+    zk = zen["kakyu"]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        mk = cur_ky["kakyu"] * zen["menjo_kakyu"] / zk
+    cur_ky["menjo_kakyu"] = np.where(zk == 0., 0., mk)
+
+    # ---- `n = 0`（20歳）の代入。上のまとめは n = 1..95 しか書かない ----
     for tokyu in range(1, 2 + 1):
-        for nenrei in range(MAX_SHOGAI_JUKYU, MIN_SHOGAI_JUKYU, -1):
-            n = nenrei - MIN_SHOGAI_JUKYU
-            kt = G.kaiteiritu_tannen[nendo - ECON_SHONENDO, nenrei]
-
-            G.Shogai_Ippan_Nendomatu[sotai_nendo, n, tokyu] = add(
-                adjustbenefit(kt, scalar(
-                    1. - G.Shikkenritu_Ippan[sotai_nendo, n],
-                    G.Shogai_Ippan_Nendomatu[sotai_nendo - 1, n - 1,
-                                             tokyu])),
-                Shogai_Ippan_Shinki[n, tokyu])
-
-            G.Shogai_20mae_Nendomatu[sotai_nendo, n, tokyu] = add(
-                adjustbenefit(kt, scalar(
-                    1. - G.Shikkenritu_20mae[sotai_nendo, n],
-                    G.Shogai_20mae_Nendomatu[sotai_nendo - 1, n - 1,
-                                             tokyu])),
-                Shogai_20mae_Shinki[n, tokyu])
-
-            # 旧法は**一般の失権率**を使う（原本のとおり）
-            G.Shogai_Kyu_Nendomatu[sotai_nendo, n, tokyu] = adjustbenefit(
-                kt, scalar(1. - G.Shikkenritu_Ippan[sotai_nendo, n],
-                           G.Shogai_Kyu_Nendomatu[sotai_nendo - 1, n - 1,
-                                                  tokyu]))
-
-            k12 = G.Kakyu_Tanka_12shi[sotai_nendo, nenrei]
-            k3 = G.Kakyu_Tanka_3shiiko[sotai_nendo, nenrei]
-
-            G.Shogai_Ippan_Nendomatu[sotai_nendo, n, tokyu]["kakyu"] = (
-                G.Shogai_Ippan_Nendomatu[sotai_nendo, n, tokyu]["ninzu"]
-                * (k12 * G.Kakyu_Wariai_Ippan_12shi[sotai_nendo, n]
-                   + k3 * G.Kakyu_Wariai_Ippan_3shiiko[sotai_nendo, n]))
-
-            G.Shogai_20mae_Nendomatu[sotai_nendo, n, tokyu]["kakyu"] = (
-                G.Shogai_20mae_Nendomatu[sotai_nendo, n, tokyu]["ninzu"]
-                * (k12 * G.Kakyu_Wariai_20mae_12shi[sotai_nendo, n]
-                   + k3 * G.Kakyu_Wariai_20mae_3shiiko[sotai_nendo, n]))
-
-            # 旧法の加算は**一般の加算割合**を使う（原本のとおり）
-            Temp_Shogai_Kyu_Nendomatu = (
-                G.Shogai_Kyu_Nendomatu[sotai_nendo, n, tokyu]["ninzu"]
-                * (k12 * G.Kakyu_Wariai_Ippan_12shi[sotai_nendo, n]
-                   + k3 * G.Kakyu_Wariai_Ippan_3shiiko[sotai_nendo, n]))
-
-            G.Shogai_Kyu_Nendomatu[sotai_nendo, n, tokyu]["kakyu"] = min(
-                Temp_Shogai_Kyu_Nendomatu,
-                G.Shogai_Kyu_Nendomatu[sotai_nendo, n, tokyu]["kakyu"])
-
-            zen = G.Shogai_Kyu_Nendomatu[sotai_nendo - 1, n - 1, tokyu]
-            if zen["kakyu"] == 0.:
-                G.Shogai_Kyu_Nendomatu[sotai_nendo, n,
-                                       tokyu]["menjo_kakyu"] = 0.
-            else:
-                G.Shogai_Kyu_Nendomatu[sotai_nendo, n,
-                                       tokyu]["menjo_kakyu"] = (
-                    G.Shogai_Kyu_Nendomatu[sotai_nendo, n, tokyu]["kakyu"]
-                    * zen["menjo_kakyu"] / zen["kakyu"])
-
         G.Shogai_Ippan_Nendomatu[sotai_nendo, 0, tokyu] = \
             Shogai_Ippan_Shinki[0, tokyu]
         G.Shogai_20mae_Nendomatu[sotai_nendo, 0, tokyu] = \
@@ -937,18 +946,22 @@ def siml(G, nendo, shubetu):
                      MIN_IZOKU_KO_JUKYU, MAX_IZOKU_KO_JUKYU)
 
     # ---- 寡婦の年度末（改定率は 67歳未満のものを使う） --------------
+    # 読むのは前年度 `[y-1, n-1]`、書くのは当年度 `[y, n]` なので年齢の
+    # 軸をまとめる（`str_op.scalar_arr` の解説）。原本は降順に回すが、
+    # 読み書きが別年度なので順序に意味が無い。`adjustbenefit` は素通しの
+    # 欄を写し戻すので in-place にできず、控えを2枚使う
     kt67 = G.kaiteiritu_tannen[nendo - ECON_SHONENDO, UNDER_67]
-    for nenrei in range(MAX_KAFU_JUKYU, MIN_KAFU_JUKYU, -1):
-        n = nenrei - MIN_KAFU_JUKYU
-        zan = 1. - G.Shikkenritu_Kafu[sotai_nendo, n]
+    NK = MAX_KAFU_JUKYU - MIN_KAFU_JUKYU + 1                 # 39
+    zan_v = (1. - G.Shikkenritu_Kafu[sotai_nendo, 1:NK])[:, None]
+    _k1 = np.empty(NK - 1, dtype=KD)
+    _k2 = np.empty(NK - 1, dtype=KD)
 
-        G.Kafu_Nendomatu[sotai_nendo, n] = add(
-            adjustbenefit(kt67, scalar(
-                zan, G.Kafu_Nendomatu[sotai_nendo - 1, n - 1])),
-            Kafu_Shinki[n])
+    scalar_arr(zan_v, G.Kafu_Nendomatu[sotai_nendo - 1, :NK - 1], _k1)
+    adjustbenefit_arr(kt67, _k1, _k2)
+    add_arr(_k2, Kafu_Shinki[1:NK], G.Kafu_Nendomatu[sotai_nendo, 1:NK])
 
-        G.Kafu_Kyu_Nendomatu[sotai_nendo, n] = adjustbenefit(
-            kt67, scalar(zan, G.Kafu_Kyu_Nendomatu[sotai_nendo - 1, n - 1]))
+    scalar_arr(zan_v, G.Kafu_Kyu_Nendomatu[sotai_nendo - 1, :NK - 1], _k1)
+    adjustbenefit_arr(kt67, _k1, G.Kafu_Kyu_Nendomatu[sotai_nendo, 1:NK])
 
     G.Kafu_Nendomatu[sotai_nendo, 0] = Kafu_Shinki[0]
     G.Kafu_Kyu_Nendomatu[sotai_nendo, 0] = G.Kafu_Zero
@@ -1182,20 +1195,28 @@ def _izoku_nendomatu(G, nendo, sotai_nendo, name, Shikken, Shinki,
     """遺族の年度末（3つとも同じ形）。`siml.c:1367-1450` の忠実移植。"""
     a = getattr(G, name)
     kt_row = G.kaiteiritu_tannen[nendo - ECON_SHONENDO]
+    N = hi - lo + 1                     # n = 0..N-1 ↔ nenrei = lo..hi
 
-    for nenrei in range(hi, lo, -1):
-        n = nenrei - lo
-        a[sotai_nendo, n] = add(
-            adjustbenefit(kt_row[nenrei],
-                          scalar(1. - Shikken[sotai_nendo, n],
-                                 a[sotai_nendo - 1, n - 1])),
-            Shinki[n])
+    # 読むのは前年度 `[y-1, n-1]`、書くのは当年度 `[y, n]` なので年齢の
+    # 軸をまとめる（`str_op.scalar_arr` の解説）。n = 1..N-1 を一度に。
+    # 改定率と失権率は年齢で決まるので、年齢の軸に沿ったベクトルで放送する
+    zan_v = (1. - Shikken[sotai_nendo, 1:N])[:, None]
+    kt_v = kt_row[lo + 1:hi + 1][:, None]
+    _i1 = np.empty(N - 1, dtype=a.dtype)
+    _i2 = np.empty(N - 1, dtype=a.dtype)
+    scalar_arr(zan_v, a[sotai_nendo - 1, :N - 1], _i1)
+    adjustbenefit_arr(kt_v, _i1, _i2)
+    add_arr(_i2, Shinki[1:N], a[sotai_nendo, 1:N])
 
-        a[sotai_nendo, n]["kakyu"] = (
-            a[sotai_nendo, n]["ninzu"]
-            * (G.Kakyu_Tanka_12shi[sotai_nendo, nenrei] * K12[sotai_nendo, n]
-               + G.Kakyu_Tanka_3shiiko[sotai_nendo, nenrei]
-               * K3[sotai_nendo, n]))
+    # 加給は人数 × (単価12歳未満 × 割合 + 単価3歳以降 × 割合)。要素ごとで
+    # 掛ける順・足す順は原本のまま。`cur` は view なので欄への代入が伝わる
+    cur = a[sotai_nendo, 1:N]
+    cur["kakyu"] = (
+        cur["ninzu"]
+        * (G.Kakyu_Tanka_12shi[sotai_nendo, lo + 1:hi + 1]
+           * K12[sotai_nendo, 1:N]
+           + G.Kakyu_Tanka_3shiiko[sotai_nendo, lo + 1:hi + 1]
+           * K3[sotai_nendo, 1:N]))
 
     a[sotai_nendo, 0] = Shinki[0]
     a[sotai_nendo, 0]["kakyu"] = (
