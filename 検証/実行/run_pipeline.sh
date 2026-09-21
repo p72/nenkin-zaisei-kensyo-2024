@@ -293,7 +293,11 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
     cd "$BUILD/被保険者推計" && make >/dev/null
 
     step "② 厚生年金 給付費推計 をビルド"
-    cd "$BUILD/厚生年金/給付費推計" && g++ -Ofast -w -I ext -I common -I lib \
+    # 同梱の Makefile の release は `-O2`（`-fast` はコメントアウト済み）。
+    # `-Ofast` は演算順の書き換えを許すので、原本と同じ `-O2` で建てる
+    # （`検証/原本の不具合.md` G1・G2）。⑥だけは Makefile 自身が
+    # `-Ofast` を指定しているので下ではそのままにしてある。
+    cd "$BUILD/厚生年金/給付費推計" && g++ -O2 -w -I ext -I common -I lib \
         -o "$SUURI/emp/exec/usys20" *.cpp
 
     step "③ 国民年金 をビルド"

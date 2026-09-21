@@ -9,6 +9,7 @@ https://www.mhlw.go.jp/content/001270476.pdf
 
     python3 検証/図/make_chart.py [出力パス]
 """
+import os
 import sys
 import matplotlib
 matplotlib.use('Agg')
@@ -44,7 +45,11 @@ ASHIMOTO = ('2024年度（足元・実績）', 25.0, 36.2)   # 公表 61.2%
 rows = sorted(ROWS, key=lambda r: -(r[2] + r[3]))
 
 
-def main(out='/home/user/0919nenkin/検証/図/所得代替率_8ケース.png'):
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def main(out=None):
+    out = out or os.path.join(HERE, '所得代替率_8ケース.png')
     fig, ax = plt.subplots(figsize=(13.4, 7.4), dpi=200)
     fig.patch.set_facecolor(SURFACE)
     ax.set_facecolor(SURFACE)
