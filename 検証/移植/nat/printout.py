@@ -96,7 +96,9 @@ from setconst import (ECON_SHONENDO, HIHO_NENREI_SUM, KURI_AGE_SAGE_SUM,
                       MENJO_3_4, MIN_ROREI_JUKYU, NENREI_SUM, SAISHUNENDO,
                       SHONENDO, SHUBETU_SUM_NENDOKAN, SUM, UNDER_64,
                       UNDER_67, ZENGAKU)
-from str_op import add, nendokan, nendokan_64
+import numpy as np
+
+from str_op import add, flat_view, nendokan, nendokan_64
 
 __all__ = ["printout"]
 
@@ -172,6 +174,18 @@ def _nendokan_all(G, fp_shinki):
             s = nendo - SHONENDO
 
             # ---- 老齢（新法・旧法・通算・5年）------------------------
+            # 下の足し込み先 `[shubetu, s, 0, K]` と `[S, s, 0, K]` は
+            # **1つのスロットに全部足す**縮約なので、順序（受給年齢が外・
+            # 年齢が内、降順）を変えられない。view をループの外に出して
+            # 間接費だけ削る（`str_op.flat_view` の解説）。足し込み先の
+            # `[0, K]` は `nendokan` が書く `[n, j]`（n ≥ 2、j ≤ 10）と
+            # 重ならない
+            _acc = []
+            for name in ("Rorei", "Rorei_Kyu", "Turo_Kyu", "Gonen"):
+                a = getattr(G, name)
+                av = flat_view(a[shubetu, s])           # 生きた view
+                _acc.append((av, av[0, K], flat_view(a[S, s])[0, K]))
+
             for jukyu_nenrei in range(MIN_ROREI_JUKYU, 70 + 1):
                 j = jukyu_nenrei - MIN_ROREI_JUKYU
                 for nenrei in range(MAX_ROREI_JUKYU, UNDER_64 - 1, -1):
@@ -196,16 +210,13 @@ def _nendokan_all(G, fp_shinki):
                         % (shubetu, nendo, nenrei, jukyu_nenrei,
                            _f(G.Rorei[shubetu, s, n, j]["noufu"])))
 
-                    for name in ("Rorei", "Rorei_Kyu", "Turo_Kyu",
-                                 "Gonen"):
-                        a = getattr(G, name)
-                        a[shubetu, s, 0, K] = add(a[shubetu, s, 0, K],
-                                                  a[shubetu, s, n, j])
-                    for name in ("Rorei", "Rorei_Kyu", "Turo_Kyu",
-                                 "Gonen"):
-                        a = getattr(G, name)
-                        a[S, s, 0, K] = add(a[S, s, 0, K],
-                                            a[shubetu, s, n, j])
+                    # 原本は配列ごとに `[shubetu]` の計 → 配列ごとに
+                    # `[S]` の計、の順だが、足し込み先が別なので配列ごとに
+                    # 両方やっても各スロットの足す順は変わらない
+                    for av, d_sh, d_s in _acc:
+                        src = av[n, j]
+                        np.add(d_sh, src, out=d_sh)
+                        np.add(d_s, src, out=d_s)
 
             # ---- 障害（一般・20歳前・旧法）--------------------------
             for nenrei in range(MAX_SHOGAI_JUKYU, UNDER_64 - 1, -1):

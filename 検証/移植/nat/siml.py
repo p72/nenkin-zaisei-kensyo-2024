@@ -153,7 +153,10 @@ from setconst import (ECON_SHONENDO, KOKKO_HIKIAGE, MAX_HIHO_KIKAN,
                       SUIKEISHONENDO, UNDER_67, WAKAMONO, ZENGAKU)
 from stdfm import NatError, extenda, extendb, extendc, nenkin_fdiv
 from str_op import (add, adjustbenefit, average_by_ninzu, multiply, scalar,
-                    scalar_2)
+                    scalar_2,
+                    # 軸をまとめて処理する版（速度のため。原本には無い）
+                    add_arr, adjustbenefit_arr, average_by_ninzu_arr,
+                    multiply_arr, scalar_arr, scalar_2_arr)
 
 __all__ = ["siml", "Shibou_Kubun", "Nendomatu_Tyousei_Keisu"]
 
@@ -493,66 +496,80 @@ def siml(G, nendo, shubetu):
         Hasseisha_Shogai[i, 0] = 0.
 
     # ---- 構造体の中身を人数で加重平均する --------------------------
-    for nenrei in range(MAX_HIHO_NENREI, MIN_HIHO_NENREI - 1, -1):
-        i = nenrei - MIN_HIHO_NENREI
-        nj = Noufu_Jokyo[i]
+    #
+    # **③でいちばん重いところ。** 原本は 年齢(51) × 期間(51) の二重ループで
+    # 1マスあたり14回 `str_op` を呼ぶ。行ごとに数えたら、この 14行だけで
+    # `str_op` の呼び出し 2,460万回のうち **約1,500万回（61%）**を占めて
+    # いた。**両軸をまとめる。**
+    #
+    # まとめてよい理由: 読むのは**前年度** `[y1, i-1, kikan-1]` と
+    # `[y1, i-1, kikan]`、書くのは**当年度** `[sotai_nendo, i, kikan]` で
+    # 別のスライス。当年度から読むのは自分のマスの `ninzu` だけで、それも
+    # 読んでから同じマスを上書きするので、マスをまたぐ依存が無い。原本は
+    # 年齢・期間とも降順に回すが、読み書きが別年度なので順序に意味が無い。
+    #
+    # 各スロットに当たる演算の列（掛ける・足す）はマスごとに変わらないので
+    # **ビット一致する**（`str_op.scalar_arr` の解説）。
+    sh = (_HIHO_N, _KIKAN_N)
 
-        for kikan in range(MAX_HIHO_KIKAN, -1, -1):
-            if nenrei == MIN_HIHO_NENREI:
-                Hiho_Zennen = G.Hihokensha_Zero
-                Taiki_Zennen = G.Taikisha_Zero
-            else:
-                if kikan == 0:
-                    Hiho_Zennen = G.Hihokensha_Zero
-                else:
-                    Hiho_Zennen = G.Hihokensha[y1, i - 1, kikan - 1]
+    # 前年度の被保険者。原本は
+    #   年齢 == MIN_HIHO_NENREI  → ゼロ（期間を問わず）
+    #   期間 == 0                → ゼロ
+    #   ほか                     → `G.Hihokensha[y1, i-1, kikan-1]`
+    # なので、1行1列ずらして残りをゼロで埋める
+    Hiho_Zennen = np.zeros(sh, dtype=HH)
+    Hiho_Zennen[1:, 1:] = G.Hihokensha[y1, :_HIHO_N - 1, :_KIKAN_N - 1]
 
-                Taiki_Zennen = G.Taikisha[y1, i - 1, kikan]
+    # 前年度の待機者。年齢 == MIN_HIHO_NENREI だけゼロ（期間はずらさない）
+    Taiki_Zennen = np.zeros(sh, dtype=HH)
+    Taiki_Zennen[1:, :] = G.Taikisha[y1, :_HIHO_N - 1, :]
 
-            Hiho_Gokei = add(scalar(Saikanyu[i, kikan], Taiki_Zennen),
-                             scalar(Hiho_Zanzon[i, kikan], Hiho_Zennen))
+    # 納付状況は年齢だけで決まる。`(51, 1)` にして期間の軸へ放送する
+    nj_b = Noufu_Jokyo[:, None]
 
-            if kikan == 0:
-                Hiho_Gokei = add(
-                    Hiho_Gokei,
-                    scalar_2((Saikanyu[i, kikan] + Shinkikanyu[i]) * 0.5,
-                             nj, nendo))
-            else:
-                Hiho_Gokei = add(
-                    Hiho_Gokei,
-                    scalar_2(Saikanyu[i, kikan] * 0.5 + Hiho_Zanzon[i, kikan],
-                             nj, nendo))
+    # `scalar_2` に渡す係数。期間 0 だけ式が違う（新規加入がここに入る）
+    c_hiho = Saikanyu * 0.5 + Hiho_Zanzon
+    c_hiho[:, 0] = (Saikanyu[:, 0] + Shinkikanyu) * 0.5
 
-            Hiho_Gokei["ninzu"] = \
-                G.Hihokensha[sotai_nendo, i, kikan]["ninzu"]
+    _t1 = np.empty(sh, dtype=HH)
+    _t2 = np.empty(sh, dtype=HH)
+    _t3 = np.empty(sh, dtype=HH)
 
-            G.Hihokensha[sotai_nendo, i, kikan] = \
-                average_by_ninzu(Hiho_Gokei)
+    # ---- 被保険者 ----
+    # `add(scalar(Saikanyu, Taiki_Zennen), scalar(Hiho_Zanzon, Hiho_Zennen))`
+    scalar_arr(Saikanyu[:, :, None], Taiki_Zennen, _t1)
+    scalar_arr(Hiho_Zanzon[:, :, None], Hiho_Zennen, _t2)
+    add_arr(_t1, _t2, _t1)
+    # `add(↑, scalar_2(係数, 納付状況, nendo))`
+    scalar_2_arr(c_hiho[:, :, None], nj_b, nendo, _t3)
+    add_arr(_t1, _t3, _t1)
+    # 人数は当年度のものに差し替えてから1人あたりに直す
+    _t1["ninzu"] = G.Hihokensha[sotai_nendo]["ninzu"]
+    average_by_ninzu_arr(_t1, G.Hihokensha[sotai_nendo])
 
-            Taiki_Gokei = add(
-                scalar(Taiki_Zanzon[i, kikan], Taiki_Zennen),
-                scalar(Dattaisha_Seizon[i, kikan], Hiho_Zennen))
+    # ---- 待機者 ----
+    scalar_arr(Taiki_Zanzon[:, :, None], Taiki_Zennen, _t1)
+    scalar_arr(Dattaisha_Seizon[:, :, None], Hiho_Zennen, _t2)
+    add_arr(_t1, _t2, _t1)
+    scalar_2_arr((Dattaisha_Seizon * 0.5)[:, :, None], nj_b, nendo, _t3)
+    add_arr(_t1, _t3, _t1)
+    _t1["ninzu"] = G.Taikisha[sotai_nendo]["ninzu"]
+    average_by_ninzu_arr(_t1, G.Taikisha[sotai_nendo])
 
-            Taiki_Gokei = add(
-                Taiki_Gokei,
-                scalar_2(Dattaisha_Seizon[i, kikan] * 0.5, nj, nendo))
+    # ---- 死亡した人（原本は `Hiho_Zennen` を書き換えて使い回す。
+    #      値渡しなので元の配列は変わらない） ----
+    # `scalar_2(0.5, 納付状況, nendo)` は期間に依らないので年齢ぶんだけ
+    # 作り、期間の軸へ放送する。連続でないスライスを `view` に渡さない
+    # よう、専用の `(51, 1)` を使う
+    _t4 = np.empty((_HIHO_N, 1), dtype=HH)
+    scalar_2_arr(0.5, nj_b, nendo, _t4)
+    _t2[:, :] = Hiho_Zennen
+    _t2["ninzu"] = Hihokensha_Shibou["ninzu"]
+    add_arr(_t2, _t4, Hihokensha_Shibou)
 
-            Taiki_Gokei["ninzu"] = \
-                G.Taikisha[sotai_nendo, i, kikan]["ninzu"]
-            G.Taikisha[sotai_nendo, i, kikan] = \
-                average_by_ninzu(Taiki_Gokei)
-
-            # 原本は `Hiho_Zennen` を書き換えて使い回す（値渡しなので
-            # 元の配列は変わらない）。移植版は写しを作る
-            Hiho_Zennen = _val(Hiho_Zennen, HH)
-            Hiho_Zennen["ninzu"] = Hihokensha_Shibou[i, kikan]["ninzu"]
-
-            Hihokensha_Shibou[i, kikan] = \
-                add(Hiho_Zennen, scalar_2(0.5, nj, nendo))
-
-            Taiki_Zennen = _val(Taiki_Zennen, HH)
-            Taiki_Zennen["ninzu"] = Taikisha_Shibou[i, kikan]["ninzu"]
-            Taikisha_Shibou[i, kikan] = Taiki_Zennen
+    Taikisha_Shibou_ninzu = Taikisha_Shibou["ninzu"].copy()
+    Taikisha_Shibou[:, :] = Taiki_Zennen
+    Taikisha_Shibou["ninzu"] = Taikisha_Shibou_ninzu
 
     if G.Option == 1:
         for nenrei in range(MAX_HIHO_NENREI, MIN_HIHO_NENREI - 1, -1):
@@ -724,52 +741,83 @@ def siml(G, nendo, shubetu):
         _rorei_shinki(G, nendo, sotai_nendo, shubetu, seibetu, Rorei_Shinki)
 
     # ---- 老齢基礎の年度末（前年度 × (1 - 失権率) × 改定率 ＋ 新規） --
+    # 原本は `jukyu_nenrei`（11通り）× `nenrei`（55通り）× 5配列の
+    # 三重ループで、1年度・1種別あたり 3,025回 `adjustbenefit(scalar())`
+    # を呼ぶ。**年齢と受給年齢の両軸をまとめる。**
+    #
+    # まとめてよい理由: 読むのは**前年度** `[y-1, n-1, j]`、書くのは
+    # **当年度** `[y, n, j]` で、別のスライスなので依存が無い。原本は
+    # `nenrei` を降順に回すが、読み書きが別年度なので順序に意味が無い。
+    # 各スロットに当たる演算は `zan` を掛けて `kt` を掛ける2回だけで
+    # 変わらないので**ビット一致する**（`str_op.scalar_arr` の解説）。
+    #
+    # `zan` と `kt` は `nenrei` だけで決まるので、年齢の軸に沿った
+    # 55本のベクトルにして放送する。
+    n_lo = 1                                    # nenrei = 61
+    n_hi = MAX_ROREI_JUKYU - MIN_ROREI_JUKYU     # nenrei = 115 → n = 55
+    nenreis = np.arange(MIN_ROREI_JUKYU + n_lo, MAX_ROREI_JUKYU + 1)
+    kt_v = G.kaiteiritu_tannen[nendo - ECON_SHONENDO,
+                               nenreis][:, None, None]
+    zan_v = (1. - G.Shikkenritu_Rorei[
+        sotai_nendo, nenreis - MIN_HIHO_NENREI])[:, None, None]
+
+    for name in ("Rorei_Nendomatu", "Rorei_Kyu_Nendomatu",
+                 "Turo_Kyu_Nendomatu", "Gonen_Nendomatu",
+                 "Rorei_Ichibu_Nendomatu"):
+        a = getattr(G, name)
+        src = a[sotai_nendo - 1, n_lo - 1:n_hi]
+        dst = a[sotai_nendo, n_lo:n_hi + 1]
+        # `adjustbenefit(kt, scalar(zan, src))` の2段を、同じ順で当てる。
+        # 素通しの欄（人数・付加年金）を `adjustbenefit` が写し戻すので
+        # `dst` を入力にした in-place にはできない（写し戻す前に
+        # 上書きしてしまう）。1年度ぶんの控えを1枚使う
+        tmp = np.empty(dst.shape, dtype=a.dtype)
+        scalar_arr(zan_v, src, tmp)
+        adjustbenefit_arr(kt_v, tmp, dst)
+
+    # 65歳の一部繰上げの拡大（生年度で決まる5コホートだけ）。
+    # `nenrei == 65` の1本だけなので受給年齢の軸をまとめる
+    seinendo = nendo - 65
+    if SUIKEISHONENDO - 64 <= seinendo <= SUIKEISHONENDO - 60:
+        n65 = 65 - MIN_ROREI_JUKYU
+        row = G.Rorei_Ichibu_Nendomatu[sotai_nendo, n65]
+        multiply_arr(
+            row,
+            G.Kakudai_Ichibu[
+                seinendo - (SUIKEISHONENDO - MAX_ROREI_JUKYU)],
+            row)
+
+    # `nenrei == jukyu_nenrei` の対角だけに新規裁定を足す。
+    # `n = nenrei - 60`・`j = jukyu_nenrei - 60` なので **n == j**。
+    # `n` は 1 以上なので j = 1..10（j = 0 は下の `n = 0` の代入が持つ）
+    for j in range(n_lo, 70 - MIN_ROREI_JUKYU + 1):
+        G.Rorei_Nendomatu[sotai_nendo, j, j] = add(
+            G.Rorei_Nendomatu[sotai_nendo, j, j], Rorei_Shinki[j])
+
+    if G.Option == 1:
+        # 65歳・受給65歳の1マスだけ。人数だけ 0 にしてから足す
+        # （年金額は足す）。`Rorei_Shinki2` を書き換える副作用も原本のまま
+        j65 = 65 - MIN_ROREI_JUKYU
+        n65 = 65 - MIN_ROREI_JUKYU
+        G.Rorei_Shinki2[j65]["ninzu"] = 0.
+        G.Rorei_Nendomatu[sotai_nendo, n65, j65] = add(
+            G.Rorei_Nendomatu[sotai_nendo, n65, j65], G.Rorei_Shinki2[j65])
+
+    # ---- `n = 0`（60歳）の代入。上のまとめは n = 1..55 しか書かない ----
     for jukyu_nenrei in range(MIN_ROREI_JUKYU, 70 + 1):
         j = jukyu_nenrei - MIN_ROREI_JUKYU
-        for nenrei in range(MAX_ROREI_JUKYU, MIN_ROREI_JUKYU, -1):
-            n = nenrei - MIN_ROREI_JUKYU
-            kt = G.kaiteiritu_tannen[nendo - ECON_SHONENDO, nenrei]
-            zan = 1. - G.Shikkenritu_Rorei[sotai_nendo,
-                                           nenrei - MIN_HIHO_NENREI]
-
-            for name in ("Rorei_Nendomatu", "Rorei_Kyu_Nendomatu",
-                         "Turo_Kyu_Nendomatu", "Gonen_Nendomatu",
-                         "Rorei_Ichibu_Nendomatu"):
-                a = getattr(G, name)
-                a[sotai_nendo, n, j] = adjustbenefit(
-                    kt, scalar(zan, a[sotai_nendo - 1, n - 1, j]))
-
-            seinendo = nendo - nenrei
-            if (SUIKEISHONENDO - 64 <= seinendo <= SUIKEISHONENDO - 60
-                    and nenrei == 65):
-                G.Rorei_Ichibu_Nendomatu[sotai_nendo, n, j] = multiply(
-                    G.Rorei_Ichibu_Nendomatu[sotai_nendo, n, j],
-                    G.Kakudai_Ichibu[
-                        seinendo - (SUIKEISHONENDO - MAX_ROREI_JUKYU), j])
-
-            if nenrei - jukyu_nenrei == 0:
-                G.Rorei_Nendomatu[sotai_nendo, n, j] = add(
-                    G.Rorei_Nendomatu[sotai_nendo, n, j], Rorei_Shinki[j])
-
-            if G.Option == 1:
-                if nenrei == 65 and jukyu_nenrei == 65:
-                    # 人数だけ 0 にしてから足す（年金額は足す）
-                    G.Rorei_Shinki2[j]["ninzu"] = 0.
-                    G.Rorei_Nendomatu[sotai_nendo, n, j] = add(
-                        G.Rorei_Nendomatu[sotai_nendo, n, j],
-                        G.Rorei_Shinki2[j])
-
         if jukyu_nenrei == MIN_ROREI_JUKYU:
             G.Rorei_Nendomatu[sotai_nendo, 0, j] = Rorei_Shinki[j]
         else:
             G.Rorei_Nendomatu[sotai_nendo, 0, j] = G.Rorei_Zero
 
-        # 原本は `[0][0]` を毎回 0 にする（`jukyu_nenrei` に依らない）
-        G.Rorei_Ichibu_Nendomatu[sotai_nendo, 0, 0] = G.Rorei_Zero
-
         G.Rorei_Kyu_Nendomatu[sotai_nendo, 0, j] = G.Rorei_Kyu_Zero
         G.Turo_Kyu_Nendomatu[sotai_nendo, 0, j] = G.Rorei_Kyu_Zero
         G.Gonen_Nendomatu[sotai_nendo, 0, j] = G.Gonen_Zero
+
+    # 原本は `[0][0]` を `jukyu_nenrei` ごとに毎回 0 にする（同じ代入を
+    # 11回するだけなので1回で同じ）
+    G.Rorei_Ichibu_Nendomatu[sotai_nendo, 0, 0] = G.Rorei_Zero
 
     # ---- 45年化のときの年度末調整（**前年度**を書き換える） --------
     if G.Option == 1:

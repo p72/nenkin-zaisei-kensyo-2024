@@ -105,7 +105,7 @@ from setconst import (HIHO_NENREI_SUM, KURI_AGE_SAGE_SUM, MAX_HIHO_NENREI,
                       SHUBETU_SUM, SUIKEISAISHUNENDO, SUIKEISHONENDO, SUM,
                       UNDER_63, UNDER_64)
 from stdfm import write_BeginData
-from str_op import add
+from str_op import add, flat_view
 
 __all__ = ["stat", "Hanbetu"]
 
@@ -184,23 +184,31 @@ def stat(G, asctime=None):
         for nendo in range(SUIKEISHONENDO, SAISHUNENDO + 1):
             s = nendo - SHONENDO
 
-            for jukyu_nenrei in range(MIN_ROREI_JUKYU, 70 + 1):
-                j = jukyu_nenrei - MIN_ROREI_JUKYU
-                for nenrei in range(UNDER_63, MAX_ROREI_JUKYU + 1):
-                    n = nenrei - NENREI_SUM
-                    for name in ("Rorei", "Rorei_Kyu", "Turo_Kyu",
-                                 "Gonen"):
-                        a = getattr(G, name)
-                        a[h, s, n, KURI_AGE_SAGE_SUM] = add(
-                            a[h, s, n, KURI_AGE_SAGE_SUM],
-                            a[shubetu, s, n, j])
-
-                    for name in ("Rorei", "Rorei_Kyu", "Turo_Kyu",
-                                 "Gonen"):
-                        a = getattr(G, name)
-                        a[SHUBETU_SUM, s, 0, KURI_AGE_SAGE_SUM] = add(
-                            a[SHUBETU_SUM, s, 0, KURI_AGE_SAGE_SUM],
-                            a[shubetu, s, n, j])
+            # 原本は 受給年齢(11) × 年齢(53) × 4配列 × 2つの足し込み先で、
+            # 1年度・1種別あたり 4,664回 `add` を呼ぶ。行ごとに数えたら
+            # `str_op` の呼び出し全体の 8% がここだった。
+            #
+            # 足し込み先は2つで、性質が違う。
+            # - `[h, s, n, 計]`     年齢ごとの計。**年齢の軸は独立**
+            #   （スロット n には受給年齢 j の順に1本ずつ足す）ので、
+            #   受給年齢を外側に回したまま年齢の軸をまとめる
+            # - `[計, s, 0, 計]`    全体の計。**1つのスロットに全部足す**
+            #   縮約なので順序（受給年齢が外・年齢が内）を変えられない。
+            #   ここは view をループの外に出して間接費だけ削る
+            #   （`str_op.flat_view` の解説）
+            # 4配列は互いに独立なので、配列ごとに回しても足す順は変わらない
+            n_lo = UNDER_63 - NENREI_SUM                # 1
+            n_hi = MAX_ROREI_JUKYU - NENREI_SUM         # 53
+            for name in ("Rorei", "Rorei_Kyu", "Turo_Kyu", "Gonen"):
+                a = getattr(G, name)
+                src = flat_view(a[shubetu, s])          # (54, 12, 欄)
+                dst_h = flat_view(a[h, s])[n_lo:n_hi + 1, KURI_AGE_SAGE_SUM]
+                dst_s = flat_view(a[SHUBETU_SUM, s])[0, KURI_AGE_SAGE_SUM]
+                for j in range(0, 70 - MIN_ROREI_JUKYU + 1):
+                    col = src[n_lo:n_hi + 1, j]
+                    np.add(dst_h, col, out=dst_h)
+                    for n in range(n_lo, n_hi + 1):
+                        np.add(dst_s, src[n, j], out=dst_s)
 
             for nenrei in range(UNDER_63, MAX_SHOGAI_JUKYU + 1):
                 n = nenrei - NENREI_SUM

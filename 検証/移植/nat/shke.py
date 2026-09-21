@@ -148,7 +148,9 @@ from setconst import (HIHO_NENREI_SUM, KOKKO_HIKIAGE,
                       NENREI_SUM, NOUFU, SAISHUNENDO, SHOGAI_TOKYU,
                       SHONENDO, SUIKEISHONENDO, SUM, UNDER_63, ZENGAKU)
 from stdfm import NatError, extendb
-from str_op import add, adjustbenefit, multiply, scalar
+from str_op import (add, adjustbenefit, multiply, scalar,
+                    # 軸をまとめて処理する版と、縮約の間接費を削る view
+                    add_arr, flat_view, multiply_arr, scalar_arr)
 
 __all__ = ["shke"]
 
@@ -395,65 +397,72 @@ def shke(G, nendo, shubetu):
                 += G.Hiho_Menjo_P[shubetu, sotai_nendo, i, dankai]
 
     # ---- 老齢（新法・旧法・通算・5年） -----------------------------
-    for jukyu_nenrei in range(MIN_ROREI_JUKYU, 70 + 1):
+    #
+    # 原本は 受給年齢(11) × 年齢(56) の二重ループで、1年度あたり
+    # 支給の計算に 3,080回・足し込みに 2,464回 `str_op` を呼ぶ。行ごとに
+    # 数えたら全体の 9.5% がここだった。3段に分けて書く。
+    #
+    # 1. **支給の計算はマスごとに独立**（`[n, j]` を読んで `[n, j]` に書く）
+    #    なので両軸をまとめる（`str_op.scalar_arr` の解説）
+    # 2. 繰下げの割引は特定のマスだけ。受給年齢ごとに高々1マスなので
+    #    そのまま回す
+    # 3. **足し込みは縮約**。63歳以下を1つの `m` に潰すので、スロット
+    #    `[m, j]` には年齢 n の順に足す。受給年齢の軸は独立なので、
+    #    年齢を外側に回したまま受給年齢をまとめる。原本は受給年齢が
+    #    外・年齢が内だが、スロットごとに見れば「n の昇順に1本ずつ」で
+    #    同じ（受給年齢をまたいで同じスロットに足すことは無い）
+    NJ = 70 - MIN_ROREI_JUKYU + 1          # 受給年齢 60〜70 の 11 通り
+    s = sotai_nendo
+
+    # 1. 支給の計算（両軸まとめ）
+    _tmp = np.empty((_ROREI_N, NJ), dtype=_R)
+    add_arr(G.Rorei_Nendomatu[s, :, :NJ], G.Rorei_Ichibu_Nendomatu[s, :, :NJ],
+            _tmp)
+    multiply_arr(G.Shikyuritu_Rorei[s][:, None], _tmp, Rorei_Shikyu[:, :NJ])
+    multiply_arr(G.Shikyuritu_Rorei_Kyu[s][:, None],
+                 G.Rorei_Kyu_Nendomatu[s, :, :NJ], Rorei_Kyu_Shikyu[:, :NJ])
+    multiply_arr(G.Shikyuritu_Turo_Kyu[s][:, None],
+                 G.Turo_Kyu_Nendomatu[s, :, :NJ], Turo_Kyu_Shikyu[:, :NJ])
+    scalar_arr(G.Shikyuritu_Gonen[s][:, None, None],
+               G.Gonen_Nendomatu[s, :, :NJ], Gonen_Shikyu[:, :NJ])
+
+    # 2. 繰下げ（66〜70歳）を 2021年度の翌年に選んだ世代だけ、
+    #    割引率で人数と年金額を調整する。受給年齢ごとに該当する年齢は
+    #    高々1つ（`nenrei = nendo - (SUIKEISHONENDO + 1) + jukyu_nenrei`）
+    for jukyu_nenrei in range(66, 70 + 1):
         j = jukyu_nenrei - MIN_ROREI_JUKYU
-        for nenrei in range(MIN_ROREI_JUKYU, MAX_ROREI_JUKYU + 1):
-            n = nenrei - MIN_ROREI_JUKYU
+        nenrei = nendo - (SUIKEISHONENDO + 1 - jukyu_nenrei)
+        if not (MIN_ROREI_JUKYU <= nenrei <= MAX_ROREI_JUKYU):
+            continue
+        n = nenrei - MIN_ROREI_JUKYU
+        if SUIKEISHONENDO + 1 <= nendo <= SUIKEISHONENDO + 10:
+            k = nendo - SUIKEISHONENDO - 1
+            Rorei_Shikyu[n, j]["ninzu"] \
+                *= G.Waribikiritu[seibetu, 0, jukyu_nenrei - 66, k]
 
-            Rorei_Shikyu[n, j] = multiply(
-                G.Shikyuritu_Rorei[sotai_nendo, n],
-                add(G.Rorei_Nendomatu[sotai_nendo, n, j],
-                    G.Rorei_Ichibu_Nendomatu[sotai_nendo, n, j]))
+            Rorei_Shikyu[n, j] = adjustbenefit(
+                G.Waribikiritu[seibetu, 1, jukyu_nenrei - 66, k],
+                Rorei_Shikyu[n, j])
+        elif nendo > SUIKEISHONENDO + 10:
+            # **人数だけ添字が 1（2023年度）**（J3）
+            Rorei_Shikyu[n, j]["ninzu"] \
+                *= G.Waribikiritu[seibetu, 0, jukyu_nenrei - 66, 1]
 
-            Rorei_Kyu_Shikyu[n, j] = multiply(
-                G.Shikyuritu_Rorei_Kyu[sotai_nendo, n],
-                G.Rorei_Kyu_Nendomatu[sotai_nendo, n, j])
+            Rorei_Shikyu[n, j] = adjustbenefit(
+                G.Waribikiritu[seibetu, 1, jukyu_nenrei - 66, 9],
+                Rorei_Shikyu[n, j])
 
-            Turo_Kyu_Shikyu[n, j] = multiply(
-                G.Shikyuritu_Turo_Kyu[sotai_nendo, n],
-                G.Turo_Kyu_Nendomatu[sotai_nendo, n, j])
-
-            Gonen_Shikyu[n, j] = scalar(
-                G.Shikyuritu_Gonen[sotai_nendo, n],
-                G.Gonen_Nendomatu[sotai_nendo, n, j])
-
-            # 繰下げ（66〜70歳）を 2021年度の翌年に選んだ世代だけ、
-            # 割引率で人数と年金額を調整する
-            if (66 <= jukyu_nenrei <= 70
-                    and nendo - nenrei == SUIKEISHONENDO + 1 - jukyu_nenrei):
-                if SUIKEISHONENDO + 1 <= nendo <= SUIKEISHONENDO + 10:
-                    k = nendo - SUIKEISHONENDO - 1
-                    Rorei_Shikyu[n, j]["ninzu"] \
-                        *= G.Waribikiritu[seibetu, 0, jukyu_nenrei - 66, k]
-
-                    Rorei_Shikyu[n, j] = adjustbenefit(
-                        G.Waribikiritu[seibetu, 1, jukyu_nenrei - 66, k],
-                        Rorei_Shikyu[n, j])
-                elif nendo > SUIKEISHONENDO + 10:
-                    # **人数だけ添字が 1（2023年度）**（J3）
-                    Rorei_Shikyu[n, j]["ninzu"] \
-                        *= G.Waribikiritu[seibetu, 0, jukyu_nenrei - 66, 1]
-
-                    Rorei_Shikyu[n, j] = adjustbenefit(
-                        G.Waribikiritu[seibetu, 1, jukyu_nenrei - 66, 9],
-                        Rorei_Shikyu[n, j])
-
-            m = (UNDER_63 - NENREI_SUM) if nenrei <= 63 \
-                else (nenrei - NENREI_SUM)
-
-            G.Rorei[shubetu, sotai_nendo, m, j] = add(
-                G.Rorei[shubetu, sotai_nendo, m, j], Rorei_Shikyu[n, j])
-
-            G.Rorei_Kyu[shubetu, sotai_nendo, m, j] = add(
-                G.Rorei_Kyu[shubetu, sotai_nendo, m, j],
-                Rorei_Kyu_Shikyu[n, j])
-
-            G.Turo_Kyu[shubetu, sotai_nendo, m, j] = add(
-                G.Turo_Kyu[shubetu, sotai_nendo, m, j],
-                Turo_Kyu_Shikyu[n, j])
-
-            G.Gonen[shubetu, sotai_nendo, m, j] = add(
-                G.Gonen[shubetu, sotai_nendo, m, j], Gonen_Shikyu[n, j])
+    # 3. 足し込み（縮約。年齢の順は原本のまま、受給年齢をまとめる）
+    _pairs = ((G.Rorei, Rorei_Shikyu), (G.Rorei_Kyu, Rorei_Kyu_Shikyu),
+              (G.Turo_Kyu, Turo_Kyu_Shikyu), (G.Gonen, Gonen_Shikyu))
+    _acc = [(flat_view(g[shubetu, s]), flat_view(sk)) for g, sk in _pairs]
+    for nenrei in range(MIN_ROREI_JUKYU, MAX_ROREI_JUKYU + 1):
+        n = nenrei - MIN_ROREI_JUKYU
+        m = (UNDER_63 - NENREI_SUM) if nenrei <= 63 \
+            else (nenrei - NENREI_SUM)
+        for gv, sv in _acc:
+            dst = gv[m, :NJ]
+            np.add(dst, sv[n, :NJ], out=dst)
 
     # 老齢の免除の「計」（段階と国庫引上げの2方向＋両方）
     for jukyu_nenrei in range(MIN_ROREI_JUKYU, 70 + 1):
