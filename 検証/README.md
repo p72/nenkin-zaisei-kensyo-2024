@@ -53,7 +53,7 @@ $ 検証/differential/run_all.sh
 - `kaiteiritu_make_before` / `kaiteiritu_make`
 - `round` / `kaiteiritu_marume` / `pension_marume` / `marume_hantei`
 
-**6システム全部の移植は `移植/` にある**（`移植/README.md`）。
+**6システム全部の移植は [`移植/`](移植/README.md) にある。**
 ①被保険者推計・②厚生年金給付費推計・③国民年金・④基礎年金・
 ⑤厚生年金収支計算・⑥分布推計、Python 153本・46,314行で、
 出力を原本とバイト単位で突き合わせてある。この `differential/` は
