@@ -1,0 +1,57 @@
+--- "a/\345\237\272\347\244\216\345\271\264\351\207\221/waku.c"	2026-09-22 01:53:33.210005239 +0000
++++ "b/\345\237\272\347\244\216\345\271\264\351\207\221/waku.c"	2026-09-22 01:53:33.254546452 +0000
+@@ -127,6 +127,54 @@
+ 	}
+ 	Hiho_Kokunen[SHONENDO - SHONENDO] = 0.;
+ 
++	/* ------------------------------------------------------------------
++	 * 第3号被保険者の廃止（第1号への振替）— 原本にはない追加レバー
++	 *
++	 *   環境変数 SANGO_HAISHI  実施年度（西暦4桁）。未設定または 0 なら何もしない
++	 *   環境変数 SANGO_NOUFU   振替後の納付率（既定 1.0 ＝全員が保険料を納める）
++	 *
++	 * 実施年度以降、被用者年金4制度の第3号（20〜59歳、年央値）を
++	 * 国民年金の拠出金算定対象者（納付者、重み1）へ移す。
++	 *   ・拠出金の頭割り（Atamawari.c）は SanteiTaishou[seido][*][SUM] で
++	 *     制度別の負担を決めるので、被用者年金側の拠出金が減り国年側が増える
++	 *   ・国民年金の保険料収入（read_file.c）は
++	 *     SanteiTaishou[KOKUNEN][*][1] × 保険料月額 で計算するので、
++	 *     振替分の保険料収入がそのまま国年勘定に立つ
++	 * 給付側（③国民年金が推計する3号の基礎年金）は触らない。3号期間は
++	 * もともと保険料納付済期間として扱われているので、全員納付の前提では
++	 * 給付は変わらない。納付率 < 1 のときは未納分を頭数からも保険料からも
++	 * 落とすだけで、給付側の減額は反映しない（保守的な近似）。
++	 * ------------------------------------------------------------------ */
++	{
++		const char *env_nendo = getenv( "SANGO_HAISHI" );
++		const char *env_ritu  = getenv( "SANGO_NOUFU" );
++		int    sango_nendo = ( env_nendo != NULL ) ? atoi( env_nendo ) : 0;
++		double sango_ritu  = ( env_ritu  != NULL ) ? atof( env_ritu )  : 1.;
++
++		if( sango_nendo > 0 )
++		{
++			printf( "第3号被保険者の廃止: 実施年度 %d 納付率 %.4f\n" , sango_nendo , sango_ritu );
++			printf( "3号振替,年度,振替人数,振替後の国年算定対象者\n" );
++			for( nendo = SHONENDO ; nendo <= SAISHUNENDO ; nendo++ )
++			{
++				double furikae = 0.;
++
++				if( nendo < sango_nendo )
++				{
++					continue;
++				}
++				sotai_nendo = nendo - SHONENDO;
++				for( seido = KOUNEN ; seido <= SHIGAKU ; seido++ )
++				{
++					furikae += SanteiTaishou[seido][sotai_nendo][3];
++					SanteiTaishou[seido][sotai_nendo][3] = 0.;
++				}
++				SanteiTaishou[KOKUNEN][sotai_nendo][1] += furikae * sango_ritu;
++				printf( "3号振替,%d,%.6f,%.6f\n" , nendo , furikae , SanteiTaishou[KOKUNEN][sotai_nendo][1] );
++			}
++		}
++	}
++
+ 	for( nendo = SHONENDO ; nendo <= SAISHUNENDO ; nendo++ )
+ 	{
+ 		sotai_nendo = nendo - SHONENDO;

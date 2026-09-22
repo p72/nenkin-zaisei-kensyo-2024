@@ -36,6 +36,18 @@
 #   DMACRO  0/1   名目下限措置の撤廃（マクロ経済スライドのフル発動）
 #   CARRY   0/1   キャリーオーバー（1:あり＝現行、0:行わない）★既定は1
 #
+#   ★原本にないレバー（このリポジトリの追加。公表値との照合対象ではない）
+#   SANGO   0/西暦4桁  第3号被保険者の廃止（第1号への振替）の実施年度。
+#                 0 なら現行どおり。例 SANGO=2027
+#   SANGO_NOUFU 0〜1  振替後の納付率（既定 1＝全員が保険料を納める）。
+#                 patches/sango-haishi.patch を④基礎年金の waku.c に当て、
+#                 実施年度以降の被用者年金4制度の3号（20〜59歳）を国民年金の
+#                 拠出金算定対象者（納付者）へ移す。頭割りと保険料収入の両方に
+#                 効く。給付側は触らない（3号期間はもともと納付済期間）。
+#                 ①②③の出力は変わらないので、通常試算と同じ番号で
+#                 YOBI を変え STEPS=45 と組み合わせれば④⑤だけ流し直せる
+#                 （ビルドは必要。SKIP_BUILD=1 と併用しないこと）。
+#
 #   WAKU_M  外枠番号  SIGO=1 のとき⑤が読む waku****-m.csv の番号（既定 WAKU）
 #   YOBI2   3桁      TOUGOU=1 のとき⑤が書く統一カット率の予備番号（既定 001）
 #                    YOBI と必ず別の番号にすること（同名を2重に開いて壊れる）
@@ -134,6 +146,8 @@ HOUJOU="${HOUJOU:-0}"
 TOUGOU="${TOUGOU:-0}"
 DMACRO="${DMACRO:-0}"
 CARRY="${CARRY:-1}"
+SANGO="${SANGO:-0}"
+SANGO_NOUFU="${SANGO_NOUFU:-1}"
 WAKU_M="${WAKU_M:-$WAKU}"
 YOBI2="${YOBI2:-001}"
 STEPS="${STEPS:-12345}"
@@ -159,6 +173,17 @@ chk CARRY   "$CARRY"   0 1
 chk JIN     "$JIN"     1 2 3
 chk QX      "$QX"      1 2 3
 chk ROUDR   "$ROUDR"   1 2 3
+case "$SANGO" in
+    0) ;;
+    20[2-9][0-9]|21[01][0-9]|2120) ;;
+    *) die "SANGO の値が不正です: 「$SANGO」（0 か 2020〜2120 の西暦4桁）" ;;
+esac
+if ! awk -v r="$SANGO_NOUFU" 'BEGIN{ exit !(r+0 > 0 && r+0 <= 1) }'; then
+    die "SANGO_NOUFU の値が不正です: 「$SANGO_NOUFU」（0 より大きく 1 以下）"
+fi
+if [ "$SANGO" != 0 ] && [ "${SKIP_BUILD:-0}" = 1 ]; then
+    die "SANGO=$SANGO は④のビルドにパッチを当てるので SKIP_BUILD=1 と併用できません"
+fi
 
 # ⑤は Touitu>=1 のとき cuta/cutb を YOBI と YOBI2 の2組そろえて書き込み用に
 # 開く（fopn.c:158-190）。同じ番号だと同名のファイルを2つのハンドルで開いて
@@ -236,6 +261,11 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
 
     step "移植パッチを適用（glibc 移植性、4箇所）"
     cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/glibc-portability.patch"
+
+    if [ "$SANGO" != 0 ]; then
+        step "第3号被保険者の廃止レバーを④基礎年金に当てる（patches/sango-haishi.patch）"
+        cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/sango-haishi.patch"
+    fi
 
     # 原本 snaps.h / stdfm.c が宣言する fdiv() は、新しい glibc の C23 縮小演算
     # 関数 fdiv() と名前が衝突する。単語単位の機械的な改名で回避する。
@@ -349,17 +379,28 @@ fi
 #         引上げ間隔 調整期間一致 カット率固定 カット率一本出し
 # grep をパイプに挟むと終了状態が隠れるので、ここも PIPESTATUS で見る
 run_bas() {   # run_bas <予備番号> <カット率固定 0/1>
-    local rc
+    local rc baslog="$SUURI/bas/log/bas-$SHISAN-$SHISAN-$ECON-$WAKU-1120-$1.log"
+    # 第3号廃止レバーは④が環境変数で受け取る（patches/sango-haishi.patch）
+    if [ "$SANGO" != 0 ]; then
+        export SANGO_HAISHI="$SANGO" SANGO_NOUFU="$SANGO_NOUFU"
+    else
+        unset SANGO_HAISHI SANGO_NOUFU
+    fi
     cd "$SUURI/bas" && set +e
     "$SUURI/bas/exec/ver0000.out" \
         "$SUURI/bas/io_file/infile.csv" "$SUURI/bas/io_file/outfile.csv" \
         "$SHISAN" "$SHISAN" "$ECON" "$WAKU" "$WAKU" "$1" \
         0 "$CARRY" "$DMACRO" 0 2031 3 "$TOUGOU" "$2" 0 \
-        | grep -E "終了年度|カット率|給付率|代替率換算"
+        | tee "$baslog" | grep -E "終了年度|カット率|給付率|代替率換算|第3号被保険者の廃止"
     rc=${PIPESTATUS[0]}
     set -e
     if [ "$rc" != "0" ]; then
         die "④ 基礎年金 が異常終了しました（終了コード $rc、予備番号 $1、カット率固定 $2）"
+    fi
+    # パッチの当たっていない④に環境変数だけ渡すと黙って通常試算になるので、
+    # レバーが効いた証拠（パッチが出す1行）が標準出力に無ければ止める
+    if [ "$SANGO" != 0 ] && ! grep -q "第3号被保険者の廃止" "$baslog"; then
+        die "SANGO=$SANGO を指定しましたが④にレバーが効いていません（ビルドにパッチが当たっていない）。SKIP_BUILD を外してください"
     fi
 }
 
@@ -418,3 +459,6 @@ echo "  人口   出生 $JIN / 死亡 $QX / 入国超過 $NC / 労働力率 $ROU
 echo "  工程   $STEPS"
 echo "  レバー 適用拡大 $KAKUDAI / 45年化 $SIGO / 高在老撤廃 $KOZAX / 報酬上限 $HOUJOU"
 echo "         調整期間一致 $TOUGOU / 名目下限撤廃 $DMACRO / キャリーオーバー $CARRY"
+if [ "$SANGO" != 0 ]; then
+    echo "  追加   第3号廃止 実施年度 $SANGO / 振替後の納付率 $SANGO_NOUFU（原本にないレバー）"
+fi
