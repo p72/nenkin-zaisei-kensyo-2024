@@ -39,7 +39,32 @@
 #   ★原本にないレバー（このリポジトリの追加。公表値との照合対象ではない）
 #   SANGO   0/西暦4桁  第3号被保険者の廃止（第1号への振替）の実施年度。
 #                 0 なら現行どおり。例 SANGO=2027
-#   SANGO_NOUFU 0〜1  振替後の納付率（既定 1＝全員が保険料を納める）。
+#   NIGO    0/西暦4桁  第2号被保険者の廃止（第1号への振替）の実施年度。
+#                 被用者年金の算定対象者が0になり、基礎年金拠出金が全額
+#                 国民年金勘定に寄る＝「基礎年金拠出金制度の廃止」。
+#                 第2号は厚年保険料18.3%を払い続ける前提なので、定額保険料は
+#                 その上乗せになる（保険料率を下げるレバーは未実装）。
+#   SANGO_NOUFU 0〜1  振替後の納付率（2号・3号の両方に適用。既定 1）。
+#   SANGO_MODE  0/1   3号廃止の財政構造（既定 0）
+#                 0: 第1号への完全移行。拠出金の按分の頭数も国民年金へ移す。
+#                    被用者年金の拠出金が年3.1兆円減り、その半分が国庫負担の
+#                    減で相殺されて、被用者年金勘定に年1.5兆円の黒字が立つ。
+#                    公的年金全体の純増（本人が新たに払う年1.2兆円）はそちらへ
+#                    流れ、基礎年金の財源はかえって悪化する。
+#                 1: 保険料だけ徴収し、拠出金の按分は現行のまま据え置く。
+#                    被用者年金の負担は動かず、純増が丸ごと基礎年金の財源に
+#                    なる。給付側は 0 と同じ。
+#
+#   SAIMU   0/1/2  債務の試算（原本の機能。既定 0）
+#                 0: 通常試算
+#                 1: 過去分試算（既発生債務。基準年度2025年度、債務種類 AK）
+#                 2: 受給者分試算（既裁定債務。同 AJ）
+#                 1/2 は先に同じ番号で通常試算を通しておくこと。⑤が通常試算の
+#                 カット率ファイル（cutr/cuta・cutb）を読むため（fopn.c:141-155）。
+#                 原本が受け付ける組合せは基準年度25・障害遺族2・加給等1・
+#                 死亡率改善1 だけで、それ以外は原本が自分で止まる
+#                 （②fileio.cpp:159-183、⑤main.c:112-142）。
+#                 出力は AK/AJ 接頭辞つき、かつ末尾が _09sum になる。
 #                 patches/sango-haishi.patch を④基礎年金の waku.c に当て、
 #                 実施年度以降の被用者年金4制度の3号（20〜59歳）を国民年金の
 #                 拠出金算定対象者（納付者）へ移す。頭割りと保険料収入の両方に
@@ -147,7 +172,10 @@ TOUGOU="${TOUGOU:-0}"
 DMACRO="${DMACRO:-0}"
 CARRY="${CARRY:-1}"
 SANGO="${SANGO:-0}"
+NIGO="${NIGO:-0}"
 SANGO_NOUFU="${SANGO_NOUFU:-1}"
+SANGO_MODE="${SANGO_MODE:-0}"
+SAIMU="${SAIMU:-0}"
 WAKU_M="${WAKU_M:-$WAKU}"
 YOBI2="${YOBI2:-001}"
 STEPS="${STEPS:-12345}"
@@ -173,17 +201,23 @@ chk CARRY   "$CARRY"   0 1
 chk JIN     "$JIN"     1 2 3
 chk QX      "$QX"      1 2 3
 chk ROUDR   "$ROUDR"   1 2 3
-case "$SANGO" in
-    0) ;;
-    20[2-9][0-9]|21[01][0-9]|2120) ;;
-    *) die "SANGO の値が不正です: 「$SANGO」（0 か 2020〜2120 の西暦4桁）" ;;
-esac
+chk SAIMU   "$SAIMU"   0 1 2
+chk SANGO_MODE "$SANGO_MODE" 0 1
+for v in SANGO NIGO; do
+    eval "val=\$$v"
+    case "$val" in
+        0) ;;
+        20[2-9][0-9]|21[01][0-9]|2120) ;;
+        *) die "$v の値が不正です: 「$val」（0 か 2020〜2120 の西暦4桁）" ;;
+    esac
+done
 if ! awk -v r="$SANGO_NOUFU" 'BEGIN{ exit !(r+0 > 0 && r+0 <= 1) }'; then
     die "SANGO_NOUFU の値が不正です: 「$SANGO_NOUFU」（0 より大きく 1 以下）"
 fi
-if [ "$SANGO" != 0 ] && [ "${SKIP_BUILD:-0}" = 1 ]; then
-    die "SANGO=$SANGO は④のビルドにパッチを当てるので SKIP_BUILD=1 と併用できません"
-fi
+# SANGO/NIGO は④のビルドにパッチが要る。SKIP_BUILD=1 でパッチ済みのビルドを
+# 使い回すのは正しい使い方なので止めない（同じビルドを何度も作り直すと遅く、
+# 複数の実行が同じビルドツリーを消し合う事故も起きる）。パッチが当たっていない
+# ビルドを使ってしまった場合は、④の実行後に run_bas がレバーの出力を探して止める。
 
 # ⑤は Touitu>=1 のとき cuta/cutb を YOBI と YOBI2 の2組そろえて書き込み用に
 # 開く（fopn.c:158-190）。同じ番号だと同名のファイルを2つのハンドルで開いて
@@ -262,8 +296,8 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
     step "移植パッチを適用（glibc 移植性、4箇所）"
     cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/glibc-portability.patch"
 
-    if [ "$SANGO" != 0 ]; then
-        step "第3号被保険者の廃止レバーを④基礎年金に当てる（patches/sango-haishi.patch）"
+    if [ "$SANGO" != 0 ] || [ "$NIGO" != 0 ]; then
+        step "号別被保険者の保険料負担レバーを④基礎年金に当てる（patches/sango-haishi.patch）"
         cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/sango-haishi.patch"
     fi
 
@@ -358,18 +392,29 @@ if run_step 2; then
 step "② 厚生年金 給付費推計 を実行（厚年＋共済3制度）"
 # 入力順は main.cpp（key, 試算番号, 経済前提, 外枠）→ cntl.cpp（seimei,
 # flg_part, flg_sigo, flg_kozax, houjou, flg_inout）の計10個。
-# psly/pslsi/pslsi2 は if(key==12||key==13) の中なので key=11 では読まれない。
-cd "$SUURI/emp" && printf "11\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n" \
-    "$SHISAN" "$ECON" "$WAKU" "$SEIMEI" \
-    "$KAKUDAI" "$SIGO" "$KOZAX" "$HOUJOU" "$((ROUDR-1))" \
-    | "$SUURI/emp/exec/usys20" > /dev/null
+# psly/pslsi/pslsi2 は if(key==12||key==13) の中なので key=11 では読まれず、
+# 債務の試算（SAIMU=1/2）のときだけ外枠の直後に3つ増えて13個になる。
+emp_kyufu_stdin() {
+    case "$SAIMU" in
+        0) printf '11\n' ;;
+        1) printf '12\n' ;;
+        2) printf '13\n' ;;
+    esac
+    printf '%s\n%s\n%s\n' "$SHISAN" "$ECON" "$WAKU"
+    if [ "$SAIMU" != 0 ]; then
+        printf '25\n2\n1\n'      # 基準年度2025 / 障害遺族は将来分 / 加給等は将来分
+    fi
+    printf '%s\n%s\n%s\n%s\n%s\n%s\n' \
+        "$SEIMEI" "$KAKUDAI" "$SIGO" "$KOZAX" "$HOUJOU" "$((ROUDR-1))"
+}
+cd "$SUURI/emp" && emp_kyufu_stdin | "$SUURI/emp/exec/usys20" > /dev/null
 fi
 
 if run_step 3; then
 step "③ 国民年金 を実行"
 cd "$SUURI/nat" && "$SUURI/nat/exec/ver0000.out" \
     "$SUURI/nat/io_file/infile.csv" "$SUURI/nat/io_file/outfile.csv" \
-    "$SHISAN" "$ECON" "$WAKU" "$BIRTHFILE" "$DEATH" 0 1 "$KAKUDAI" 2027 0 2031 3 "$WAKU" \
+    "$SHISAN" "$ECON" "$WAKU" "$BIRTHFILE" "$DEATH" "$SAIMU" 1 "$KAKUDAI" 2027 0 2031 3 "$WAKU" \
     > /dev/null
 fi
 
@@ -380,18 +425,19 @@ fi
 # grep をパイプに挟むと終了状態が隠れるので、ここも PIPESTATUS で見る
 run_bas() {   # run_bas <予備番号> <カット率固定 0/1>
     local rc baslog="$SUURI/bas/log/bas-$SHISAN-$SHISAN-$ECON-$WAKU-1120-$1.log"
-    # 第3号廃止レバーは④が環境変数で受け取る（patches/sango-haishi.patch）
-    if [ "$SANGO" != 0 ]; then
-        export SANGO_HAISHI="$SANGO" SANGO_NOUFU="$SANGO_NOUFU"
+    # 号別廃止レバーは④が環境変数で受け取る（patches/sango-haishi.patch）
+    if [ "$SANGO" != 0 ] || [ "$NIGO" != 0 ]; then
+        export SANGO_HAISHI="$SANGO" NIGO_HAISHI="$NIGO" \
+               SANGO_NOUFU="$SANGO_NOUFU" SANGO_MODE="$SANGO_MODE"
     else
-        unset SANGO_HAISHI SANGO_NOUFU
+        unset SANGO_HAISHI NIGO_HAISHI SANGO_NOUFU SANGO_MODE
     fi
     cd "$SUURI/bas" && set +e
     "$SUURI/bas/exec/ver0000.out" \
         "$SUURI/bas/io_file/infile.csv" "$SUURI/bas/io_file/outfile.csv" \
         "$SHISAN" "$SHISAN" "$ECON" "$WAKU" "$WAKU" "$1" \
-        0 "$CARRY" "$DMACRO" 0 2031 3 "$TOUGOU" "$2" 0 \
-        | tee "$baslog" | grep -E "終了年度|カット率|給付率|代替率換算|第3号被保険者の廃止"
+        "$SAIMU" "$CARRY" "$DMACRO" 0 2031 3 "$TOUGOU" "$2" 0 \
+        | tee "$baslog" | grep -E "終了年度|カット率|給付率|代替率換算|号別被保険者の保険料負担"
     rc=${PIPESTATUS[0]}
     set -e
     if [ "$rc" != "0" ]; then
@@ -399,8 +445,8 @@ run_bas() {   # run_bas <予備番号> <カット率固定 0/1>
     fi
     # パッチの当たっていない④に環境変数だけ渡すと黙って通常試算になるので、
     # レバーが効いた証拠（パッチが出す1行）が標準出力に無ければ止める
-    if [ "$SANGO" != 0 ] && ! grep -q "第3号被保険者の廃止" "$baslog"; then
-        die "SANGO=$SANGO を指定しましたが④にレバーが効いていません（ビルドにパッチが当たっていない）。SKIP_BUILD を外してください"
+    if { [ "$SANGO" != 0 ] || [ "$NIGO" != 0 ]; } && ! grep -q "号別被保険者の保険料負担" "$baslog"; then
+        die "SANGO=$SANGO NIGO=$NIGO を指定しましたが④にレバーが効いていません（ビルドにパッチが当たっていない）。SKIP_BUILD を外してください"
     fi
 }
 
@@ -418,7 +464,14 @@ fi
 #   Flg_Sigo==1 → 続けて waku-m の外枠番号を聞かれる
 #   Touitu >=1  → 続けて統一カット率の予備番号を聞かれる
 emp_stdin() {
-    printf '0\n8\n%s\n%s\n' "$KAKUDAI" "$SIGO"
+    if [ "$SAIMU" != 0 ]; then
+        # 債務の試算では給付水準の決定方法を聞かれず Fpset=9 に固定される。
+        # 代わりに 基準年度・障害遺族・加給等・死亡率改善 の4つを聞かれる。
+        printf '%s\n25\n2\n1\n1\n' "$SAIMU"
+    else
+        printf '0\n8\n'
+    fi
+    printf '%s\n%s\n' "$KAKUDAI" "$SIGO"
     if [ "$SIGO" = 1 ]; then printf '%s\n' "$WAKU_M"; fi
     printf '%s\n%s\n' "$HOUJOU" "$TOUGOU"
     if [ "$TOUGOU" -ge 1 ]; then printf '%s\n' "$YOBI2"; fi
@@ -457,8 +510,12 @@ if [ "$TOUGOU" = 1 ]; then printf ' (+%s)' "$YOBI2"; fi
 echo
 echo "  人口   出生 $JIN / 死亡 $QX / 入国超過 $NC / 労働力率 $ROUDR"
 echo "  工程   $STEPS"
+case "$SAIMU" in
+    1) echo "  債務   過去分試算（既発生債務・基準年度2025年度・AK・_09sum）" ;;
+    2) echo "  債務   受給者分試算（既裁定債務・基準年度2025年度・AJ・_09sum）" ;;
+esac
 echo "  レバー 適用拡大 $KAKUDAI / 45年化 $SIGO / 高在老撤廃 $KOZAX / 報酬上限 $HOUJOU"
 echo "         調整期間一致 $TOUGOU / 名目下限撤廃 $DMACRO / キャリーオーバー $CARRY"
-if [ "$SANGO" != 0 ]; then
-    echo "  追加   第3号廃止 実施年度 $SANGO / 振替後の納付率 $SANGO_NOUFU（原本にないレバー）"
+if [ "$SANGO" != 0 ] || [ "$NIGO" != 0 ]; then
+    echo "  追加   号別 第3号 $SANGO 年度 / 第2号 $NIGO 年度 / 納付率 $SANGO_NOUFU / 構造 $SANGO_MODE（原本にないレバー）"
 fi

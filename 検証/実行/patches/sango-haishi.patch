@@ -1,53 +1,123 @@
---- "a/\345\237\272\347\244\216\345\271\264\351\207\221/waku.c"	2026-09-22 01:53:33.210005239 +0000
-+++ "b/\345\237\272\347\244\216\345\271\264\351\207\221/waku.c"	2026-09-22 01:53:33.254546452 +0000
-@@ -127,6 +127,54 @@
+diff -ruN "a/\345\237\272\347\244\216\345\271\264\351\207\221/mkisosu.h" "b/\345\237\272\347\244\216\345\271\264\351\207\221/mkisosu.h"
+--- "a/\345\237\272\347\244\216\345\271\264\351\207\221/mkisosu.h"	2026-09-22 11:54:06.658970572 +0000
++++ "b/\345\237\272\347\244\216\345\271\264\351\207\221/mkisosu.h"	2026-09-22 11:54:06.682964545 +0000
+@@ -59,6 +59,11 @@
+ EXTERN double Hiho_Kokunen[SAISHUNENDO - SHONENDO + 1];
+ EXTERN double Sankyu_Taishou[SAISHUNENDO - SHONENDO + 1];
+ EXTERN double Ikukyu_Taishou[SAISHUNENDO - SHONENDO + 1];
++
++/* 号別被保険者から保険料だけを徴収する人数（原本にない追加）。
++   SANGO_MODE=1 のとき waku.c が埋め、read_file.c が保険料収入に足す。
++   拠出金の按分（SanteiTaishou）には乗せないので、被用者年金の負担は動かない。 */
++EXTERN double Sango_Hokenryou_Ninzu[SAISHUNENDO - SHONENDO + 1];
+ EXTERN double Kokko_Wariai[SAISHUNENDO - ( SHONENDO - 1 ) + 1];
+ EXTERN double Tokubetu_Kokko_Wariai[SAISHUNENDO - ( SHONENDO - 1 ) + 1][TOKUBETU_SHURUI];
+ EXTERN double Cut_ritu[SAISHUNENDO - SHONENDO + 1][MAX_JUKYU - UNDER_63 + 1];
+diff -ruN "a/\345\237\272\347\244\216\345\271\264\351\207\221/read_file.c" "b/\345\237\272\347\244\216\345\271\264\351\207\221/read_file.c"
+--- "a/\345\237\272\347\244\216\345\271\264\351\207\221/read_file.c"	2026-09-22 11:54:06.655347824 +0000
++++ "b/\345\237\272\347\244\216\345\271\264\351\207\221/read_file.c"	2026-09-22 11:54:06.683050004 +0000
+@@ -160,10 +160,12 @@
+ 		Hokenryou_y[nendo - SHONENDO]
+ 		 = Hokenryou_m[nendo - 1 - SHONENDO][1]
+ 			* ( SanteiTaishou[KOKUNEN][nendo - 1 - SHONENDO][1]
+-				- Sankyu_Taishou[nendo - 1 - SHONENDO] - Ikukyu_Taishou[nendo - 1 - SHONENDO] )
++				- Sankyu_Taishou[nendo - 1 - SHONENDO] - Ikukyu_Taishou[nendo - 1 - SHONENDO]
++				+ Sango_Hokenryou_Ninzu[nendo - 1 - SHONENDO] )
+ 		  + Hokenryou_m[nendo - SHONENDO][1]
+ 			* ( SanteiTaishou[KOKUNEN][nendo - SHONENDO][1]
+-				- Sankyu_Taishou[nendo - SHONENDO] - Ikukyu_Taishou[nendo - SHONENDO] ) * 11.;
++				- Sankyu_Taishou[nendo - SHONENDO] - Ikukyu_Taishou[nendo - SHONENDO]
++				+ Sango_Hokenryou_Ninzu[nendo - SHONENDO] ) * 11.;
+ 
+ 		Kodomo_Noufukin[nendo - SHONENDO]
+ 		 = Hokenryou_m[nendo - 1 - SHONENDO][1] * Ikukyu_Taishou[nendo - 1 - SHONENDO]
+diff -ruN "a/\345\237\272\347\244\216\345\271\264\351\207\221/waku.c" "b/\345\237\272\347\244\216\345\271\264\351\207\221/waku.c"
+--- "a/\345\237\272\347\244\216\345\271\264\351\207\221/waku.c"	2026-09-22 11:54:06.654767381 +0000
++++ "b/\345\237\272\347\244\216\345\271\264\351\207\221/waku.c"	2026-09-22 11:54:06.683116499 +0000
+@@ -127,6 +127,90 @@
  	}
  	Hiho_Kokunen[SHONENDO - SHONENDO] = 0.;
  
 +	/* ------------------------------------------------------------------
-+	 * 第3号被保険者の廃止（第1号への振替）— 原本にはない追加レバー
++	 * 号別被保険者の保険料負担 — 原本にはない追加レバー
 +	 *
-+	 *   環境変数 SANGO_HAISHI  実施年度（西暦4桁）。未設定または 0 なら何もしない
-+	 *   環境変数 SANGO_NOUFU   振替後の納付率（既定 1.0 ＝全員が保険料を納める）
++	 *   SANGO_HAISHI  第3号を対象にする実施年度（西暦4桁）。0/未設定なら何もしない
++	 *   NIGO_HAISHI   第2号を対象にする実施年度（西暦4桁）。0/未設定なら何もしない
++	 *   SANGO_NOUFU   保険料を納める割合（既定 1.0 ＝全員納付）
++	 *   SANGO_MODE    財政構造の選択（既定 0）
++	 *       0: 第1号への完全移行。拠出金の按分の頭数も国民年金へ移す。
++	 *          被用者年金の拠出金が減り（3号なら年3.1兆円）、その半分が
++	 *          国庫負担の減で相殺されるので、被用者年金勘定に年1.5兆円の
++	 *          黒字が立つ。公的年金全体の純増（＝本人が新たに払う保険料）は
++	 *          そちらへ流れ、基礎年金の財源は逆に悪化する。
++	 *       1: 保険料だけ徴収し、拠出金の按分は現行のまま据え置く。
++	 *          被用者年金の負担は1円も動かず、純増が丸ごと基礎年金の
++	 *          財源になる。給付側は 0 と同じ（3号期間はもともと納付済期間）。
 +	 *
-+	 * 実施年度以降、被用者年金4制度の第3号（20〜59歳、年央値）を
-+	 * 国民年金の拠出金算定対象者（納付者、重み1）へ移す。
-+	 *   ・拠出金の頭割り（Atamawari.c）は SanteiTaishou[seido][*][SUM] で
-+	 *     制度別の負担を決めるので、被用者年金側の拠出金が減り国年側が増える
-+	 *   ・国民年金の保険料収入（read_file.c）は
-+	 *     SanteiTaishou[KOKUNEN][*][1] × 保険料月額 で計算するので、
-+	 *     振替分の保険料収入がそのまま国年勘定に立つ
-+	 * 給付側（③国民年金が推計する3号の基礎年金）は触らない。3号期間は
-+	 * もともと保険料納付済期間として扱われているので、全員納付の前提では
-+	 * 給付は変わらない。納付率 < 1 のときは未納分を頭数からも保険料からも
-+	 * 落とすだけで、給付側の減額は反映しない（保守的な近似）。
++	 * 拠出金の頭割りは Atamawari.c が SanteiTaishou[seido][*][SUM] で決め、
++	 * 国民年金の保険料収入は read_file.c が
++	 *   保険料月額 ×（SanteiTaishou[国年][*][1号] − 産休 − 育休
++	 *                 ＋ Sango_Hokenryou_Ninzu[*]）× 12
++	 * で決める。モード0は前者と後者の両方を、モード1は後者だけを動かす。
 +	 * ------------------------------------------------------------------ */
 +	{
-+		const char *env_nendo = getenv( "SANGO_HAISHI" );
++		const char *env_sango = getenv( "SANGO_HAISHI" );
++		const char *env_nigo  = getenv( "NIGO_HAISHI" );
 +		const char *env_ritu  = getenv( "SANGO_NOUFU" );
-+		int    sango_nendo = ( env_nendo != NULL ) ? atoi( env_nendo ) : 0;
-+		double sango_ritu  = ( env_ritu  != NULL ) ? atof( env_ritu )  : 1.;
++		const char *env_mode  = getenv( "SANGO_MODE" );
++		int    haishi_nendo[4];
++		double furikae_ritu = ( env_ritu != NULL ) ? atof( env_ritu ) : 1.;
++		int    mode = ( env_mode != NULL ) ? atoi( env_mode ) : 0;
++		int    goubetu;
 +
-+		if( sango_nendo > 0 )
++		haishi_nendo[2] = ( env_nigo  != NULL ) ? atoi( env_nigo  ) : 0;
++		haishi_nendo[3] = ( env_sango != NULL ) ? atoi( env_sango ) : 0;
++
++		if( haishi_nendo[2] > 0 || haishi_nendo[3] > 0 )
 +		{
-+			printf( "第3号被保険者の廃止: 実施年度 %d 納付率 %.4f\n" , sango_nendo , sango_ritu );
-+			printf( "3号振替,年度,振替人数,振替後の国年算定対象者\n" );
++			printf( "号別被保険者の保険料負担: 第2号 %d年度 第3号 %d年度 納付率 %.4f 構造 %d（%s）\n" ,
++				haishi_nendo[2] , haishi_nendo[3] , furikae_ritu , mode ,
++				( mode == 0 ) ? "第1号への完全移行" : "保険料のみ徴収・拠出金据え置き" );
++			printf( "号別振替,年度,2号人数,3号人数,国年算定対象者,保険料のみ徴収人数\n" );
 +			for( nendo = SHONENDO ; nendo <= SAISHUNENDO ; nendo++ )
 +			{
-+				double furikae = 0.;
++				double taishou[4];
 +
-+				if( nendo < sango_nendo )
-+				{
-+					continue;
-+				}
++				taishou[2] = 0.;
++				taishou[3] = 0.;
 +				sotai_nendo = nendo - SHONENDO;
-+				for( seido = KOUNEN ; seido <= SHIGAKU ; seido++ )
++				for( goubetu = 2 ; goubetu <= 3 ; goubetu++ )
 +				{
-+					furikae += SanteiTaishou[seido][sotai_nendo][3];
-+					SanteiTaishou[seido][sotai_nendo][3] = 0.;
++					if( haishi_nendo[goubetu] <= 0 || nendo < haishi_nendo[goubetu] )
++					{
++						continue;
++					}
++					for( seido = KOUNEN ; seido <= SHIGAKU ; seido++ )
++					{
++						taishou[goubetu] += SanteiTaishou[seido][sotai_nendo][goubetu];
++						if( mode == 0 )
++						{
++							SanteiTaishou[seido][sotai_nendo][goubetu] = 0.;
++						}
++					}
++					if( mode == 0 )
++					{
++						SanteiTaishou[KOKUNEN][sotai_nendo][1]
++						 += taishou[goubetu] * furikae_ritu;
++					}
++					else
++					{
++						Sango_Hokenryou_Ninzu[sotai_nendo]
++						 += taishou[goubetu] * furikae_ritu;
++					}
 +				}
-+				SanteiTaishou[KOKUNEN][sotai_nendo][1] += furikae * sango_ritu;
-+				printf( "3号振替,%d,%.6f,%.6f\n" , nendo , furikae , SanteiTaishou[KOKUNEN][sotai_nendo][1] );
++				if( taishou[2] > 0. || taishou[3] > 0. )
++				{
++					printf( "号別振替,%d,%.6f,%.6f,%.6f,%.6f\n" , nendo ,
++						taishou[2] , taishou[3] ,
++						SanteiTaishou[KOKUNEN][sotai_nendo][1] ,
++						Sango_Hokenryou_Ninzu[sotai_nendo] );
++				}
 +			}
 +		}
 +	}

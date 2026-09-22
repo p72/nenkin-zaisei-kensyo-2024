@@ -3,6 +3,9 @@
 """
 第3号被保険者の廃止シナリオ — ④基礎年金・⑤収支計算の出力を読んで比較する
 
+第3号に保険料を求める2つの財政構造（第1号移行型／拠出金按分据置型）を、
+現行の調整方式と「調整期間の一致」の両方で計算する。
+
 読むもの（work/suuri/rev2024 配下、run_sango.sh が作る）
   bas/rslt/kekka{S}-{S}-{E}-{W}-1120-{Y}a.csv     ④ 調整後の結果（11ブロック）
   bas/log/bas-{S}-{S}-{E}-{W}-1120-{Y}.log          ④ の標準出力（3号振替の人数）
@@ -32,11 +35,16 @@ CASES = OrderedDict([
 # 調整期間の一致（TOUGOU=1）は④を2周し、2周目（YOBI2）が最終の基礎年金見通し
 SCEN = OrderedDict([
     ("000", ("現行制度（通常試算）",                    "000", "000")),
-    ("301", ("3号廃止・全員納付",                       "301", "301")),
+    ("301", ("3号廃止・第1号移行型",                    "301", "301")),
+    ("501", ("3号廃止・拠出金按分据置型",               "501", "501")),
     ("100", ("現行制度＋調整期間の一致",                "100", "101")),
-    ("310", ("3号廃止・全員納付＋調整期間の一致",       "310", "311")),
-    ("321", ("3号廃止・納付率0.8（感度）",              "321", "321")),
+    ("310", ("3号廃止・第1号移行型＋調整期間の一致",    "310", "311")),
+    ("321", ("3号廃止・第1号移行型・納付率0.8（感度）", "321", "321")),
 ])
+# 差を取る組（ベース予備番号, 比較予備番号）
+PAIRS = (("000", "301"), ("000", "501"), ("100", "310"), ("000", "321"))
+# 調整期間の一致（④を2周する）シナリオ。国年単独の積立金は意味を持たない
+TOUGOU_YOBI = ("100", "310")
 
 
 def fnum(s):
@@ -149,6 +157,8 @@ def load_run(suuri, case, yobi5, yobi4):
     r["kyo_total"] = series(kk, "合計")
     kkk = kb["基礎年金拠出金（国庫）"]
     r["tanka_kokko"] = series(kkk, "単価")
+    r["kokko_total"] = series(kkk, "合計")
+    r["kokko_kokunen"] = series(kkk, "国年")
 
     st = kb["拠出金算定対象者"]
     r["santei_total"] = series(st, "合計")
@@ -161,14 +171,19 @@ def load_run(suuri, case, yobi5, yobi4):
     dk = kb["独自給付費等"]
     r["hiho_1go"] = series(dk, "１号被保険者数")
 
-    # ④の標準出力（3号振替）
+    # ④の標準出力（号別振替）: 号別振替,年度,2号,3号,国年算定対象者,保険料のみ徴収人数
     r["furikae"] = OrderedDict()
+    r["furikae_2"] = OrderedDict()
+    r["furikae_3"] = OrderedDict()
     if os.path.exists(log):
         with open(log, encoding="utf-8", errors="replace") as f:
             for line in f:
-                m = re.match(r"3号振替,(\d{4}),([-\d.eE+]+),", line)
+                m = re.match(r"号別振替,(\d{4}),([-\d.eE+]+),([-\d.eE+]+),", line)
                 if m:
-                    r["furikae"][int(m.group(1))] = float(m.group(2))
+                    y, f2, f3 = int(m.group(1)), float(m.group(2)), float(m.group(3))
+                    r["furikae_2"][y] = f2
+                    r["furikae_3"][y] = f3
+                    r["furikae"][y] = f2 + f3
 
     # ⑤ 要約
     sb = read_blocks(summ)
@@ -258,7 +273,7 @@ def main():
     for (case, yobi), r in runs.items():
         t, h, k = r["final_rr"]
         ke = f"{r['kiso_end']}年度" + ("（**均衡せず**）" if r["kiso_end"] >= 2120 else "")
-        if yobi in ("100", "310"):   # 調整期間の一致: 国年と厚年を一体で均衡させるので国年単独の積立金は参照しない
+        if yobi in TOUGOU_YOBI:   # 調整期間の一致: 国年と厚年を一体で均衡させるので国年単独の積立金は参照しない
             dep, dogai = "—（一体で均衡）", "—"
         else:
             dep = f"{r['kn_depleted']}年度" if r["kn_depleted"] else "なし"
@@ -274,7 +289,7 @@ def main():
     w("| ケース | 比較 | 所得代替率の差 | 比例の差 | 基礎の差 | 基礎の調整終了の差 |")
     w("|---|---|---|---|---|---|")
     for case in CASES:
-        for base, alt in (("000", "301"), ("100", "310"), ("000", "321")):
+        for base, alt in PAIRS:
             if (case, base) in runs and (case, alt) in runs:
                 b, a = runs[(case, base)], runs[(case, alt)]
                 d = [a["final_rr"][i] - b["final_rr"][i] for i in range(3)]
@@ -284,11 +299,12 @@ def main():
 
     # ---- 表2 国年勘定への影響（実施年度と節目）
     years = [args.year, 2030, 2040, 2050, 2060, 2080, 2100, 2119]
-    for case in CASES:
-        if (case, "000") not in runs or (case, "301") not in runs:
+    for case, alt_yobi in [(c, y) for c in CASES for y in ("301", "501")]:
+        if (case, "000") not in runs or (case, alt_yobi) not in runs:
             continue
-        b, a = runs[(case, "000")], runs[(case, "301")]
-        w(f"## 表2-{case} 国民年金勘定と厚生年金勘定の差分（{CASES[case]}、3号廃止・全員納付 − 現行、兆円・名目）\n")
+        b, a = runs[(case, "000")], runs[(case, alt_yobi)]
+        w(f"## 表2-{case}-{alt_yobi} 国民年金勘定と厚生年金勘定の差分"
+          f"（{CASES[case]}、{SCEN[alt_yobi][0]} − 現行、兆円・名目）\n")
         w("| 年度 | 振替人数（万人） | 国年 保険料収入の増 | 国年 拠出金の増 | 国年 国庫負担の増 | 国年 収支への純効果 | （参考）頭数効果だけ | 国年 年度末積立金の差 | 厚年 拠出金の減 | 厚年 積立金の差 | 同（厚年支出の年数） |")
         w("|---|---|---|---|---|---|---|---|---|---|---|")
         for y in years:
@@ -335,8 +351,8 @@ def main():
 
     # ---- 表4 被保険者数の構成
     w("## 表4 拠出金算定対象者（現行制度、万人）\n")
-    w("| ケース | 年度 | 合計 | 1号（納付・免除加重） | 3号（4制度計） | 1号被保険者数 | 3号／合計 |")
-    w("|---|---|---|---|---|---|---|")
+    w("| ケース | 年度 | 合計 | 1号（納付・免除加重） | 3号（4制度計） | 3号／合計 |")
+    w("|---|---|---|---|---|---|")
     for case in CASES:
         if (case, "000") not in runs:
             continue
@@ -344,8 +360,33 @@ def main():
         for y in (2025, args.year, 2040, 2060, 2080, 2100):
             if y in b["santei_total"]:
                 w(f"| {CASES[case]} | {y} | {b['santei_total'][y]/1e4:,.0f} | {b['santei_1go'][y]/1e4:,.0f} | "
-                  f"{b['santei_3go'][y]/1e4:,.0f} | {b['hiho_1go'][y]/1e4:,.0f} | {100*b['santei_3go'][y]/b['santei_total'][y]:.1f}% |")
+                  f"{b['santei_3go'][y]/1e4:,.0f} | "
+                  f"{100*b['santei_3go'][y]/b['santei_total'][y]:.1f}% |")
     w("")
+
+    # ---- 表5 国庫負担（総額は基礎年金の水準でしか動かない）
+    w("## 表5 基礎年金拠出金の国庫負担（兆円・名目）\n")
+    w("国庫負担は基礎年金給付費の1/2を頭数で按分したもの。振替は分子（基礎年金の総額）を"
+      "動かさないので、**総額は配分が変わるだけで直接には動かない**。総額が動くのは"
+      "基礎年金の給付水準そのものが変わったときだけ。\n")
+    w("| ケース | シナリオ | 年度 | 国庫負担 合計 | 現行との差 | うち国年分の差 | うち被用者年金分の差 |")
+    w("|---|---|---|---|---|---|---|")
+    for case in CASES:
+        for alt in ("301", "501", "310"):
+            base = "100" if alt in TOUGOU_YOBI else "000"
+            if (case, base) not in runs or (case, alt) not in runs:
+                continue
+            bb, aa = runs[(case, base)], runs[(case, alt)]
+            for y in (args.year, 2040, 2060, 2080, 2100):
+                if y not in aa["kokko_total"]:
+                    continue
+                d = cho(aa["kokko_total"][y] - bb["kokko_total"][y])
+                dk = cho(aa["kokko_kokunen"][y] - bb["kokko_kokunen"][y])
+                w(f"| {CASES[case]} | {SCEN[alt][0]} | {y} | {cho(aa['kokko_total'][y]):.2f} | "
+                  f"{d:+.2f} | {dk:+.2f} | {d - dk:+.2f} |")
+    w("")
+    w("注: 「現行との差」の比較相手は、調整期間の一致のシナリオは一致ありの現行、"
+      "それ以外は通常試算。\n")
 
     res_md = os.path.join(HERE, "結果.md")
     with open(res_md, "w", encoding="utf-8") as f:
@@ -372,7 +413,9 @@ def main():
     figdir = os.path.join(HERE, "図")
     os.makedirs(figdir, exist_ok=True)
 
-    C_BASE, C_ALT, C_BASE_T, C_ALT_T = "#4C72B0", "#C44E52", "#8C8C8C", "#DD8452"
+    # 検証済みのカテゴリ配色（1:青 2:橙 3:緑）と、一致ありを表す無彩色・淡色
+    C_BASE, C_ALT, C_SUE = "#2a78d6", "#eb6834", "#1baf7a"
+    C_BASE_T, C_ALT_T = "#8C8C8C", "#eda100"
 
     for case in CASES:
         if (case, "000") not in runs or (case, "301") not in runs:
@@ -380,22 +423,28 @@ def main():
         b, a = runs[(case, "000")], runs[(case, "301")]
         bt = runs.get((case, "100"))
         at = runs.get((case, "310"))
+        s1 = runs.get((case, "501"))
         yrs = [y for y in b["rr_total"] if 2024 <= y <= 2100]
 
         # 図1 所得代替率の推移（新規裁定時）
         fig, axes = plt.subplots(1, 3, figsize=(15, 4.6))
+        lines = [(b, C_BASE, "-", 2.0, "現行制度"),
+                 (a, C_ALT, "-", 2.0, "第1号移行型"),
+                 (s1, C_SUE, "-", 2.0, "拠出金按分据置型"),
+                 (bt, C_BASE_T, "--", 1.5, "現行＋調整期間の一致"),
+                 (at, C_ALT_T, "--", 1.5, "第1号移行型＋調整期間の一致"),
+                 ]
         for ax, key, ttl in zip(axes, ("rr_total", "rr_hirei", "rr_kiso"), ("所得代替率（計）", "うち報酬比例", "うち基礎")):
-            ax.plot(yrs, [b[key][y] for y in yrs], color=C_BASE, lw=2, label="現行制度")
-            ax.plot(yrs, [a[key][y] for y in yrs], color=C_ALT, lw=2, label="3号廃止・全員納付")
-            if bt and at:
-                ax.plot(yrs, [bt[key][y] for y in yrs], color=C_BASE_T, lw=1.5, ls="--", label="現行＋調整期間の一致")
-                ax.plot(yrs, [at[key][y] for y in yrs], color=C_ALT_T, lw=1.5, ls="--", label="3号廃止＋調整期間の一致")
+            for r_, c_, ls_, lw_, lb_ in lines:
+                if r_ is None:
+                    continue
+                ax.plot(yrs, [r_[key][y] for y in yrs], color=c_, lw=lw_, ls=ls_, label=lb_)
             ax.set_title(ttl)
             ax.set_xlabel("年度")
             ax.set_ylabel("%")
             ax.grid(alpha=0.3)
         axes[0].legend(fontsize=8, loc="lower left")
-        fig.suptitle(f"所得代替率の推移 — {CASES[case]}（3号廃止 {args.year}年度実施）", fontsize=13)
+        fig.suptitle(f"所得代替率の推移 — {CASES[case]}（{args.year}年度実施）", fontsize=13)
         fig.tight_layout()
         fig.savefig(os.path.join(figdir, f"所得代替率_{case}.png"), dpi=130)
         plt.close(fig)
@@ -403,12 +452,19 @@ def main():
         # 図2 国年・厚年の積立金
         fig, axes = plt.subplots(1, 2, figsize=(12, 4.6))
         yk = [y for y in b["kn_tumitate"] if 2024 <= y <= 2120]
-        axes[0].plot(yk, [cho(b["kn_tumitate"][y]) for y in yk], color=C_BASE, lw=2, label="現行制度")
-        axes[0].plot(yk, [cho(a["kn_tumitate"][y]) for y in yk], color=C_ALT, lw=2, label="3号廃止・全員納付")
+        for r_, c_, lb_ in ((b, C_BASE, "現行制度"), (a, C_ALT, "第1号移行型"),
+                            (s1, C_SUE, "拠出金按分据置型")):
+            if r_ is None:
+                continue
+            axes[0].plot(yk, [cho(r_["kn_tumitate"][y]) for y in yk], color=c_, lw=2, label=lb_)
+        axes[0].axhline(0, color="gray", lw=0.8)
         axes[0].set_title("国民年金勘定 年度末積立金（名目、兆円）")
         yk2 = [y for y in b["kou_tumitate"] if 2024 <= y <= 2120]
-        axes[1].plot(yk2, [oku_to_cho(b["kou_tumitate"][y]) for y in yk2], color=C_BASE, lw=2, label="現行制度")
-        axes[1].plot(yk2, [oku_to_cho(a["kou_tumitate"][y]) for y in yk2], color=C_ALT, lw=2, label="3号廃止・全員納付")
+        for r_, c_, lb_ in ((b, C_BASE, "現行制度"), (a, C_ALT, "第1号移行型"),
+                            (s1, C_SUE, "拠出金按分据置型")):
+            if r_ is None:
+                continue
+            axes[1].plot(yk2, [oku_to_cho(r_["kou_tumitate"][y]) for y in yk2], color=c_, lw=2, label=lb_)
         axes[1].set_title("厚生年金勘定（4制度計） 年度末積立金（名目、兆円）")
         for ax in axes:
             ax.set_xlabel("年度")
