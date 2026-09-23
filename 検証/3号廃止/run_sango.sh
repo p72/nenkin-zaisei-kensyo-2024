@@ -14,6 +14,8 @@
 #   301        3号廃止 2027年度・全員納付（第1号移行型）
 #   501        同上だが拠出金の按分は据え置き（拠出金按分据置型）
 #   310/311    3号廃止 2027年度・全員納付 ＋ 調整期間の一致
+#   510/511    拠出金按分据置型 ＋ 調整期間の一致（310/311 と一致するはず。
+#              一致の下では按分の置き方は勘定間の移転にすぎない）
 #   321        3号廃止 2027年度・納付率を SANGO_NOUFU_ALT に（感度）
 #
 # 使い方: 検証/3号廃止/run_sango.sh [実施年度(既定2027)] [感度用の納付率(既定0.8)]
@@ -41,6 +43,7 @@ for CASE in "3003 1 1 0 2" "3001"; do
     run STEPS=45 YOBI=301 SANGO="$YEAR"                            "$RUN" "$@"
     run STEPS=45 YOBI=501 SANGO="$YEAR" SANGO_MODE=1               "$RUN" "$@"
     run STEPS=45 YOBI=310 YOBI2=311 SANGO="$YEAR" TOUGOU=1         "$RUN" "$@"
+    run STEPS=45 YOBI=510 YOBI2=511 SANGO="$YEAR" SANGO_MODE=1 TOUGOU=1 "$RUN" "$@"
     run STEPS=45 YOBI=321 SANGO="$YEAR" SANGO_NOUFU="$NOUFU_ALT"   "$RUN" "$@"
 done
 echo; echo "######## 3号廃止シナリオ 完了 ########"
