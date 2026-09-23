@@ -50,6 +50,12 @@ YEARS = (2024, 2027, 2030, 2035, 2040, 2050, 2060, 2080, 2100, 2120)
 #   yobi4  ④の最終結果の予備番号（調整期間の一致では⑤と違う）
 #   base   比べる相手（⑤の予備番号, ④の予備番号, 行見出し）。調整期間の一致の
 #          シナリオは、現行＋一致（100/101）と比べるのが筋
+#   waku   外枠番号（試算番号 → 外枠番号）。①から流し直すシナリオ（適用拡大など）は
+#          通常試算の出力を上書きしないよう外枠番号を分けている。省略時は試算番号
+#   yobi   シナリオの予備番号（省略時はキー）。キーを「相手-シナリオ」にすれば、
+#          現行制度以外の2つのシナリオどうしも対照表にできる
+#   base_waku  比べる相手の外枠番号（省略時は試算番号）
+#   note3  表の下の注3（省略時は official フラグから決める）
 SCENARIOS = {
     "501": dict(
         name="按分据置", label="按分据置型", yobi4="501", base=("000", "000", "現行制度"),
@@ -60,6 +66,31 @@ SCENARIOS = {
              "（マクロ経済スライドをかけなくても国民年金が余る）で、均衡解ではない。"
              "国民年金の積立度合が2120年度に1を大きく超えるのはそのため。",
     ),
+    "040": dict(
+        name="適用拡大860万", label="適用拡大", yobi4="040", base=("000", "000", "現行制度"),
+        waku={"3003": "3403", "3001": "3401"},
+        title="被用者保険の適用拡大（約860万人）を行った場合（厚生労働省のオプション試算）",
+        desc="適用拡大：週10時間以上の全ての雇用者を被用者保険（厚生年金）の適用対象とする"
+             "（約860万人）。①被保険者推計から流し直した（KAKUDAI=4）",
+        note="適用拡大は厚生労働省自身のオプション試算で、この行は公表の財政見通し"
+             "（詳細結果等2 No.13・No.15）と全項目一致する。",
+        official=True,
+    ),
+    "501-040": dict(
+        name="按分据置対適用拡大", label="適用拡大", yobi="040", yobi4="040",
+        base=("501", "501", "按分据置型"), waku={"3003": "3403", "3001": "3401"},
+        title="被用者保険の適用拡大（約860万人）",
+        desc="按分据置型（上の行）：2027年度から第3号（20〜59歳）が第1号と同じ定額保険料を全員納付。"
+             "基礎年金拠出金の按分（頭数）は現行のまま<br>"
+             "○ 適用拡大（網かけの行）：週10時間以上の全ての雇用者を被用者保険（厚生年金）の"
+             "適用対象とする（約860万人）。厚生労働省のオプション試算",
+        note="どちらも現行制度より基礎年金の水準を上げるが、経路が逆である。按分据置型は"
+             "第1号に保険料を払う人を足し、適用拡大は第1号から人を抜く。"
+             "按分据置型の基礎の「調整なし」は天井に当たった値で、均衡解ではない。",
+        note3="按分据置型は、公表された計算プログラムに独自のレバーを加えて計算した"
+              '<b style="font-weight:bold">非公式の独自計算</b>で、厚生労働省の試算ではない。'
+              "適用拡大は厚生労働省のオプション試算の財政見通しと一致する。",
+    ),
 }
 SCEN = ()   # ((⑤の予備番号, ④の予備番号, 行見出し), …) の2つ組。main() が台帳から組む
 CASES = {"3003": "過去30年投影ケース", "3001": "高成長実現ケース"}
@@ -69,9 +100,11 @@ def load(case):
     v = f"{case}-{case}-{case}-{case}"
     kk = co.read_kakaku(v, "000", BAS)
     out = {}
-    for yb, y4, _ in SCEN:
-        out[yb] = dict(emp=co.read_emp(v, yb, SH), nat=co.read_nat(v, y4, BAS),
-                       rate=co.read_rate(v, yb, SH), run=_m.load_run(SUURI, case, yb, y4))
+    for yb, y4, _lab, waku in SCEN:
+        vv = f"{case}-{case}-{case}-{waku or case}"
+        out[yb] = dict(emp=co.read_emp(vv, yb, SH), nat=co.read_nat(vv, y4, BAS),
+                       rate=co.read_rate(vv, yb, SH),
+                       run=_m.load_run(SUURI, case, yb, y4, waku))
     return kk, out
 
 
@@ -88,7 +121,7 @@ def rows(kind, kk, d):
     out = []
     for y in YEARS:
         vals = {}
-        for yb, _y4, _ in SCEN:
+        for yb, _y4, _l, _w in SCEN:
             t = d[yb][kind][y]
             v = [t[c] for c in cols] + [t["年度末積立金"] * kk[2024] / kk[y], t.get("積立度合", float("nan"))]
             if kind == "emp":
@@ -96,7 +129,7 @@ def rows(kind, kk, d):
                 v += [r["所得代替率"] * 100, r["代替率(基礎)"] * 100, r["代替率(比例)"] * 100]
             vals[yb] = v
         base = SCEN[0][0]
-        for i, (yb, _y4, lab) in enumerate(SCEN):
+        for i, (yb, _y4, lab, _w) in enumerate(SCEN):
             cells = []
             for j, x in enumerate(vals[yb]):
                 s = f1(x)
@@ -113,7 +146,7 @@ def rows(kind, kk, d):
 def summary(d):
     trs = []
     base = SCEN[0][0]
-    for yb, _y4, lab in SCEN:
+    for yb, _y4, lab, _w in SCEN:
         r = d[yb]["rate"][2120]; run = d[yb]["run"]
         ke = run["kiso_end"]; he = run["hirei_end"]
         kes = "調整なし" if ke <= 2024 else (f"{ke}（均衡せず）" if ke >= 2120 else f"{ke}")
@@ -169,6 +202,23 @@ table.s tr.alt td { background: #e3f5ee; }
 """
 
 
+def note3_head():
+    if SCEN[0][0] == "000":
+        return ("現行制度の値は、厚生労働省「令和6(2024)年財政検証」詳細結果等の財政見通しと"
+                "一致する（本リポジトリで全項目照合済み）。")
+    return ""
+
+
+def note3(spec):
+    if spec.get("note3"):
+        return spec["note3"]
+    if spec.get("official"):
+        return (f'{spec["label"]}の行も厚生労働省のオプション試算の財政見通しと一致する。'
+                "表の組み方は本リポジトリによるもので、厚生労働省の資料ではない。")
+    return (f'{spec["label"]}は、公表された計算プログラムに独自のレバーを加えて計算した'
+            '<b style="font-weight:bold">非公式の独自計算</b>で、厚生労働省の試算ではない。')
+
+
 def page(case, spec):
     kk, d = load(case)
     return f"""<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>{CSS}</style></head><body><div class="page">
@@ -192,7 +242,7 @@ def page(case, spec):
 <div class="notes">
 （注1）厚生年金は、公表の「厚生年金の財政見通し」と同じく被用者年金4制度（厚生年金・国共済・地共済・私学共済）の合計。「報酬比例」には厚生年金の独自給付（定額・加給・加算）を含む。<br>
 （注2）「積立度合」は前年度末積立金の当年度の支出合計に対する倍率。所得代替率はモデル世帯の年金額のその年度の現役男子の平均手取りに対する比率（基礎は夫婦2人分）。<br>
-（注3）現行制度の値は、厚生労働省「令和6(2024)年財政検証」詳細結果等の財政見通しと一致する（本リポジトリで全項目照合済み）。{spec["label"]}は、公表された計算プログラムに独自のレバーを加えて計算した<b style="font-weight:bold">非公式の独自計算</b>で、厚生労働省の試算ではない。
+（注3）{note3_head()}{note3(spec)}
 </div></div></body></html>"""
 
 
@@ -219,8 +269,10 @@ def main():
         if yobi not in SCENARIOS:
             sys.exit(f"予備番号 {yobi} は SCENARIOS 台帳にありません（{', '.join(SCENARIOS)}）")
         spec = SCENARIOS[yobi]
-        SCEN = (spec["base"], (yobi, spec["yobi4"], spec["label"]))
         for case in a.case:
+            SCEN = (spec["base"] + (spec.get("base_waku", {}).get(case),),
+                    (spec.get("yobi", yobi), spec["yobi4"], spec["label"],
+                     spec.get("waku", {}).get(case)))
             name = f"対照表_{case}_{yobi}_{spec['name']}"
             html_path = os.path.join(tmp if chrome else outdir, name + ".html")
             with open(html_path, "w", encoding="utf-8") as f:

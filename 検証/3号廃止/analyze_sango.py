@@ -113,12 +113,14 @@ def series(block, name, year_offset=0, key_col=0):
     return out
 
 
-def load_run(suuri, case, yobi5, yobi4):
-    S = case
-    kek = os.path.join(suuri, "bas", "rslt", f"kekka{S}-{S}-{S}-{S}-1120-{yobi4}a.csv")
-    log = os.path.join(suuri, "bas", "log", f"bas-{S}-{S}-{S}-{S}-1120-{yobi4}.log")
+def load_run(suuri, case, yobi5, yobi4, waku=None):
+    """waku は外枠番号（既定は試算番号と同じ）。適用拡大のように①から流し直す
+    シナリオは外枠番号を分けて通常試算の出力を上書きしないようにしている。"""
+    S, W = case, (waku or case)
+    kek = os.path.join(suuri, "bas", "rslt", f"kekka{S}-{S}-{S}-{W}-1120-{yobi4}a.csv")
+    log = os.path.join(suuri, "bas", "log", f"bas-{S}-{S}-{S}-{W}-1120-{yobi4}.log")
     summ = os.path.join(suuri, "emp", "rslt", "ez_arev", "shushi",
-                        f"03summary.{S}-{S}-{S}-{S}-1120-{yobi5}_08sum.csv")
+                        f"03summary.{S}-{S}-{S}-{W}-1120-{yobi5}_08sum.csv")
     if not (os.path.exists(kek) and os.path.exists(summ)):
         return None
     r = {}
