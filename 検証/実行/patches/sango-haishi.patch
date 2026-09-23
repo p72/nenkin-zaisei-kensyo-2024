@@ -34,7 +34,7 @@ diff -ruN "a/\345\237\272\347\244\216\345\271\264\351\207\221/read_file.c" "b/\3
 diff -ruN "a/\345\237\272\347\244\216\345\271\264\351\207\221/waku.c" "b/\345\237\272\347\244\216\345\271\264\351\207\221/waku.c"
 --- "a/\345\237\272\347\244\216\345\271\264\351\207\221/waku.c"	2026-09-22 11:54:06.654767381 +0000
 +++ "b/\345\237\272\347\244\216\345\271\264\351\207\221/waku.c"	2026-09-22 11:54:06.683116499 +0000
-@@ -127,6 +127,90 @@
+@@ -127,6 +127,131 @@
  	}
  	Hiho_Kokunen[SHONENDO - SHONENDO] = 0.;
  
@@ -121,6 +121,47 @@ diff -ruN "a/\345\237\272\347\244\216\345\271\264\351\207\221/waku.c" "b/\345\23
 +			}
 +		}
 +	}
++
++	/* ------------------------------------------------------------------
++	 * 第1号の第3号登録 — 原本にはない追加レバー（思考実験）
++	 *
++	 *   ICHIGO_SANGO  実施年度（西暦4桁）。0/未設定なら何もしない
++	 *
++	 * 実施年度以降、第1号被保険者の全員を厚生年金の第3号として数える。
++	 *   ・国民年金の拠出金算定対象者（納付者ベース）と産休・育休の免除者を 0 にする
++	 *     → 国民年金の保険料収入は 0、拠出金の按分の頭数も 0
++	 *   ・第1号被保険者数（Hiho_Kokunen、未納・免除を含む頭数）を
++	 *     厚生年金の第3号の算定対象者に足す（第3号は全員が算定対象）
++	 * 給付側（③国民年金・②厚年給付費）は動かさない。未納・免除の期間が
++	 * 第3号の納付済期間に変わる分の給付増は入っていない。
++	 * Hiho_Kokunen は福祉年金の伸び（read_file.c）にも使うので書き換えない。
++	 * ------------------------------------------------------------------ */
++	{
++		const char *env_ichigo = getenv( "ICHIGO_SANGO" );
++		int ichigo_nendo = ( env_ichigo != NULL ) ? atoi( env_ichigo ) : 0;
++
++		if( ichigo_nendo > 0 )
++		{
++			printf( "第1号の第3号登録: %d年度\n" , ichigo_nendo );
++			printf( "1号3号登録,年度,1号被保険者,国年算定対象者,産休,育休,厚年3号(登録前),厚年3号(登録後)\n" );
++			for( nendo = ichigo_nendo ; nendo <= SAISHUNENDO ; nendo++ )
++			{
++				double mae;
++
++				sotai_nendo = nendo - SHONENDO;
++				mae = SanteiTaishou[KOUNEN][sotai_nendo][3];
++				printf( "1号3号登録,%d,%.6f,%.6f,%.6f,%.6f,%.6f," , nendo ,
++					Hiho_Kokunen[sotai_nendo] , SanteiTaishou[KOKUNEN][sotai_nendo][1] ,
++					Sankyu_Taishou[sotai_nendo] , Ikukyu_Taishou[sotai_nendo] , mae );
++				SanteiTaishou[KOUNEN][sotai_nendo][3] += Hiho_Kokunen[sotai_nendo];
++				SanteiTaishou[KOKUNEN][sotai_nendo][1] = 0.;
++				Sankyu_Taishou[sotai_nendo] = 0.;
++				Ikukyu_Taishou[sotai_nendo] = 0.;
++				printf( "%.6f\n" , SanteiTaishou[KOUNEN][sotai_nendo][3] );
++			}
++		}
++	}
++
 +
  	for( nendo = SHONENDO ; nendo <= SAISHUNENDO ; nendo++ )
  	{

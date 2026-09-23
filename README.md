@@ -379,6 +379,7 @@ python3 検証/掲載表/compare_keisaihyou.py --keisaihyou papers/2024report_ba
 | `DMACRO` | 名目下限措置の撤廃 |
 | `CARRY` | キャリーオーバー（1=あり、既定） |
 | `SANGO` `SANGO_MODE` `NIGO` `SANGO_NOUFU` | **原本にない追加レバー**: 第3号・第2号に保険料を求める場合の実施年度・財政構造・納付率。公表値との照合対象ではない（下記） |
+| `ICHIGO` | **原本にない追加レバー**: 第1号の全員を第3号として登録する実施年度（思考実験）。公表値との照合対象ではない |
 
 ```bash
 検証/実行/run_pipeline.sh 3001                      # 通常試算

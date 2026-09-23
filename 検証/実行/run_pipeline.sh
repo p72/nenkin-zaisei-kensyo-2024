@@ -55,6 +55,13 @@
 #                    増収は国民年金勘定に入る。基礎年金の水準が上がると
 #                    その費用は被用者年金（報酬比例の削減）と国庫にもかかる。
 #                    給付側は 0 と同じ。調整期間の一致の下では 0 と15桁一致。
+#   ICHIGO  0/西暦4桁  第1号被保険者の全員を第3号として登録する実施年度（思考実験）。
+#                 国民年金の拠出金算定対象者と産休・育休の免除者を0にし、
+#                 第1号被保険者数（未納・免除を含む頭数）を厚生年金の第3号に
+#                 足す。国民年金の保険料収入も拠出金の按分も0になり、
+#                 基礎年金の水準が国民年金勘定から切り離される。
+#                 給付側は触らない（未納・免除期間が納付済期間に変わる分の
+#                 給付増は入らない）。SANGO/NIGO と同じパッチ・同じ流し方。
 #
 #   SAIMU   0/1/2  債務の試算（原本の機能。既定 0）
 #                 0: 通常試算
@@ -176,6 +183,7 @@ SANGO="${SANGO:-0}"
 NIGO="${NIGO:-0}"
 SANGO_NOUFU="${SANGO_NOUFU:-1}"
 SANGO_MODE="${SANGO_MODE:-0}"
+ICHIGO="${ICHIGO:-0}"
 SAIMU="${SAIMU:-0}"
 WAKU_M="${WAKU_M:-$WAKU}"
 YOBI2="${YOBI2:-001}"
@@ -204,7 +212,7 @@ chk QX      "$QX"      1 2 3
 chk ROUDR   "$ROUDR"   1 2 3
 chk SAIMU   "$SAIMU"   0 1 2
 chk SANGO_MODE "$SANGO_MODE" 0 1
-for v in SANGO NIGO; do
+for v in SANGO NIGO ICHIGO; do
     eval "val=\$$v"
     case "$val" in
         0) ;;
@@ -297,7 +305,7 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
     step "移植パッチを適用（glibc 移植性、4箇所）"
     cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/glibc-portability.patch"
 
-    if [ "$SANGO" != 0 ] || [ "$NIGO" != 0 ]; then
+    if [ "$SANGO" != 0 ] || [ "$NIGO" != 0 ] || [ "$ICHIGO" != 0 ]; then
         step "号別被保険者の保険料負担レバーを④基礎年金に当てる（patches/sango-haishi.patch）"
         cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/sango-haishi.patch"
     fi
@@ -433,12 +441,17 @@ run_bas() {   # run_bas <予備番号> <カット率固定 0/1>
     else
         unset SANGO_HAISHI NIGO_HAISHI SANGO_NOUFU SANGO_MODE
     fi
+    if [ "$ICHIGO" != 0 ]; then
+        export ICHIGO_SANGO="$ICHIGO"
+    else
+        unset ICHIGO_SANGO
+    fi
     cd "$SUURI/bas" && set +e
     "$SUURI/bas/exec/ver0000.out" \
         "$SUURI/bas/io_file/infile.csv" "$SUURI/bas/io_file/outfile.csv" \
         "$SHISAN" "$SHISAN" "$ECON" "$WAKU" "$WAKU" "$1" \
         "$SAIMU" "$CARRY" "$DMACRO" 0 2031 3 "$TOUGOU" "$2" 0 \
-        | tee "$baslog" | grep -E "終了年度|カット率|給付率|代替率換算|号別被保険者の保険料負担"
+        | tee "$baslog" | grep -E "終了年度|カット率|給付率|代替率換算|号別被保険者の保険料負担|第1号の第3号登録"
     rc=${PIPESTATUS[0]}
     set -e
     if [ "$rc" != "0" ]; then
@@ -448,6 +461,9 @@ run_bas() {   # run_bas <予備番号> <カット率固定 0/1>
     # レバーが効いた証拠（パッチが出す1行）が標準出力に無ければ止める
     if { [ "$SANGO" != 0 ] || [ "$NIGO" != 0 ]; } && ! grep -q "号別被保険者の保険料負担" "$baslog"; then
         die "SANGO=$SANGO NIGO=$NIGO を指定しましたが④にレバーが効いていません（ビルドにパッチが当たっていない）。SKIP_BUILD を外してください"
+    fi
+    if [ "$ICHIGO" != 0 ] && ! grep -q "第1号の第3号登録" "$baslog"; then
+        die "ICHIGO=$ICHIGO を指定しましたが④にレバーが効いていません（ビルドにパッチが当たっていない）。SKIP_BUILD を外してください"
     fi
 }
 
@@ -519,4 +535,7 @@ echo "  レバー 適用拡大 $KAKUDAI / 45年化 $SIGO / 高在老撤廃 $KOZA
 echo "         調整期間一致 $TOUGOU / 名目下限撤廃 $DMACRO / キャリーオーバー $CARRY"
 if [ "$SANGO" != 0 ] || [ "$NIGO" != 0 ]; then
     echo "  追加   号別 第3号 $SANGO 年度 / 第2号 $NIGO 年度 / 納付率 $SANGO_NOUFU / 構造 $SANGO_MODE（原本にないレバー）"
+fi
+if [ "$ICHIGO" != 0 ]; then
+    echo "  追加   第1号の第3号登録 $ICHIGO 年度（原本にないレバー・思考実験）"
 fi
