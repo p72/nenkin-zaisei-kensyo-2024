@@ -294,10 +294,12 @@ def main(argv=None):
                         else "ずれている（上を見ること）。"))
         return 0 if (ok and not extra and not diff) else 1
 
-    print("\n次にやること:")
+    print("\n次にやること（PR で出す。CLAUDE.md「変更は PR で出す」）:")
     print("  cd %s" % dest)
     print("  git status && git diff")
-    print("  git add -A && git commit && git push -u origin main")
+    print("  git switch -c claude/<内容>   # 写す前に切っていなければ")
+    print("  git add -A && git commit && git push -u origin HEAD")
+    print("  → main 向けの PR を作り、人がマージする")
     return 0 if ok else 1
 
 
