@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""厚生労働省の「財政見通し」表の形で、現行制度と3号廃止・拠出金按分据置型を並べる
+"""財政見通し対照表 — 厚生労働省の「財政見通し」表の形で、現行制度とシナリオを並べる
 
-  図/財政見通し_按分据置_3003.png / .pdf   過去30年投影ケース
-  図/財政見通し_按分据置_3001.png / .pdf   高成長実現ケース
+法改正の「新旧対照表」に倣い、現行制度と改正案（シナリオ）を同じ表に並べる。
+厚生年金（被用者年金4制度計）と国民年金を1枚（A4縦）にし、各年度2行
+（上が比べる相手＝現行制度、網かけがシナリオ）。シナリオの行で相手と値が
+違うところは太字。列は公表の財政見通しと同じ（報酬比例には独自給付を含む）。
 
-厚生年金（被用者年金4制度計）と国民年金を1枚（A4縦）に並べ、各年度2行
-（上が現行制度、網かけが按分据置型）にする。按分据置型の行で現行と値が違う
-ところは太字。列は公表の財政見通しと同じ（報酬比例には独自給付を含む）。
+  図/対照表_{試算番号}_{予備番号}_{短い名前}.png / .pdf
+
+試算番号（3003 など）と予備番号（run_sango.sh の一覧、501 など）の組で一意に
+決まる。シナリオの説明文は下の SCENARIOS 台帳に置き、新しいシナリオは
+台帳に1項目足せば同じ表が出る。
 
 現行制度の値は公表の財政見通しと一致する（検証/オプション試算/ で全項目照合済み）。
 
@@ -15,8 +19,11 @@ HTML を作り、ヘッドレス Chromium で PNG と PDF にする。Chromium �
 CHROME、PATH 上の chromium / google-chrome、PLAYWRIGHT_BROWSERS_PATH の順に探す。
 見つからなければ HTML だけ残す。
 
-使い方: python3 検証/3号廃止/make_zaisei_hyou_sango.py
+使い方:
+  python3 検証/3号廃止/make_taishohyo.py                       # 3003・3001 × 501
+  python3 検証/3号廃止/make_taishohyo.py --case 3003 --yobi 501
 """
+import argparse
 import glob
 import importlib.util
 import os
@@ -37,7 +44,24 @@ SUURI = os.path.join(ROOT, "work", "suuri", "rev2024")
 SH = os.path.join(SUURI, "emp", "rslt", "ez_arev", "shushi")
 BAS = os.path.join(SUURI, "bas", "rslt")
 YEARS = (2024, 2027, 2030, 2035, 2040, 2050, 2060, 2080, 2100, 2120)
-SCEN = (("000", "現行制度"), ("501", "按分据置型"))
+# 対照表にするシナリオの台帳。キーは予備番号（⑤が読む番号）。
+#   name   ファイル名に使う短い名前
+#   label  表の行見出し
+#   yobi4  ④の最終結果の予備番号（調整期間の一致では⑤と違う）
+#   base   比べる相手（⑤の予備番号, ④の予備番号, 行見出し）。調整期間の一致の
+#          シナリオは、現行＋一致（100/101）と比べるのが筋
+SCENARIOS = {
+    "501": dict(
+        name="按分据置", label="按分据置型", yobi4="501", base=("000", "000", "現行制度"),
+        title="第3号被保険者に保険料を課し基礎年金拠出金の按分は据え置いた場合（拠出金按分据置型）",
+        desc="按分据置型：2027年度から第3号（20〜59歳）が第1号と同じ定額保険料を全員納付。"
+             "基礎年金拠出金の按分（頭数）は現行のまま",
+        note='<b style="font-weight:bold">按分据置型の基礎の「調整なし」は天井に当たった値</b>'
+             "（マクロ経済スライドをかけなくても国民年金が余る）で、均衡解ではない。"
+             "国民年金の積立度合が2120年度に1を大きく超えるのはそのため。",
+    ),
+}
+SCEN = ()   # ((⑤の予備番号, ④の予備番号, 行見出し), …) の2つ組。main() が台帳から組む
 CASES = {"3003": "過去30年投影ケース", "3001": "高成長実現ケース"}
 
 
@@ -45,9 +69,9 @@ def load(case):
     v = f"{case}-{case}-{case}-{case}"
     kk = co.read_kakaku(v, "000", BAS)
     out = {}
-    for yb, _ in SCEN:
-        out[yb] = dict(emp=co.read_emp(v, yb, SH), nat=co.read_nat(v, yb, BAS),
-                       rate=co.read_rate(v, yb, SH), run=_m.load_run(SUURI, case, yb, yb))
+    for yb, y4, _ in SCEN:
+        out[yb] = dict(emp=co.read_emp(v, yb, SH), nat=co.read_nat(v, y4, BAS),
+                       rate=co.read_rate(v, yb, SH), run=_m.load_run(SUURI, case, yb, y4))
     return kk, out
 
 
@@ -64,35 +88,37 @@ def rows(kind, kk, d):
     out = []
     for y in YEARS:
         vals = {}
-        for yb, _ in SCEN:
+        for yb, _y4, _ in SCEN:
             t = d[yb][kind][y]
             v = [t[c] for c in cols] + [t["年度末積立金"] * kk[2024] / kk[y], t.get("積立度合", float("nan"))]
             if kind == "emp":
                 r = d[yb]["rate"][y]
                 v += [r["所得代替率"] * 100, r["代替率(基礎)"] * 100, r["代替率(比例)"] * 100]
             vals[yb] = v
-        for i, (yb, lab) in enumerate(SCEN):
+        base = SCEN[0][0]
+        for i, (yb, _y4, lab) in enumerate(SCEN):
             cells = []
             for j, x in enumerate(vals[yb]):
                 s = f1(x)
-                diff = yb != "000" and f1(x) != f1(vals["000"][j])
+                diff = yb != base and f1(x) != f1(vals[base][j])
                 cls = []
                 if diff: cls.append("d")
                 if j == len(cols) + 2 or (kind == "emp" and j == len(cols) + 2): cls.append("sep")
                 cells.append(f'<td class="{" ".join(cls)}">{s}</td>')
             yc = f'<td class="y" rowspan="2">{y}</td>' if i == 0 else ""
-            out.append(f'<tr class="{"alt" if yb != "000" else "base"}">{yc}<td class="lab">{lab}</td>{"".join(cells)}</tr>')
+            out.append(f'<tr class="{"alt" if yb != base else "base"}">{yc}<td class="lab">{lab}</td>{"".join(cells)}</tr>')
     return "\n".join(out)
 
 
 def summary(d):
     trs = []
-    for yb, lab in SCEN:
+    base = SCEN[0][0]
+    for yb, _y4, lab in SCEN:
         r = d[yb]["rate"][2120]; run = d[yb]["run"]
         ke = run["kiso_end"]; he = run["hirei_end"]
         kes = "調整なし" if ke <= 2024 else (f"{ke}（均衡せず）" if ke >= 2120 else f"{ke}")
         hes = "調整なし" if he <= 2024 else f"{he}"
-        trs.append(f"<tr class='{'alt' if yb!='000' else 'base'}'><td class='lab'>{lab}</td>"
+        trs.append(f"<tr class='{'alt' if yb != base else 'base'}'><td class='lab'>{lab}</td>"
                    f"<td>{r['所得代替率']*100:.1f}%</td><td>{r['代替率(比例)']*100:.1f}%</td><td>{hes}</td>"
                    f"<td>{r['代替率(基礎)']*100:.1f}%</td><td>{kes}</td></tr>")
     return "\n".join(trs)
@@ -143,14 +169,14 @@ table.s tr.alt td { background: #e3f5ee; }
 """
 
 
-def page(case):
+def page(case, spec):
     kk, d = load(case)
     return f"""<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>{CSS}</style></head><body><div class="page">
-<h1>厚生年金・国民年金の財政見通し<span class="stamp">非公式</span></h1>
-<div class="sub">現行制度と、第3号被保険者に保険料を課し基礎年金拠出金の按分は据え置いた場合（拠出金按分据置型）の比較</div>
+<h1>財政見通し対照表<span class="stamp">非公式</span></h1>
+<div class="sub">{SCEN[0][2]}と、{spec["title"]}の対照表</div>
 <div class="cond">○ 人口：出生中位、死亡中位、外国人の入国超過数16.4万人　○ 経済：{CASES[case]}<br>
-○ 按分据置型：2027年度から第3号（20〜59歳）が第1号と同じ定額保険料を全員納付。基礎年金拠出金の按分（頭数）は現行のまま<br>
-○ 網かけの行が按分据置型。<b style="font-weight:bold">太字</b>は現行制度と値が違うところ</div>
+○ {spec["desc"]}<br>
+○ 網かけの行が{spec["label"]}。<b style="font-weight:bold">太字</b>は{SCEN[0][2]}と値が違うところ</div>
 <h2>厚生年金（被用者年金4制度計）</h2>
 <table class="t">{HEAD_EMP}
 {rows("emp", kk, d)}</table>
@@ -161,12 +187,12 @@ def page(case):
 <tr><th>水準</th><th>調整<br>終了年度</th><th>水準</th><th>調整<br>終了年度</th></tr>
 {summary(d)}</table>
 <div class="notes" style="max-width:400px">
-<b style="font-weight:bold">按分据置型の基礎の「調整なし」は天井に当たった値</b>（マクロ経済スライドをかけなくても国民年金が余る）で、均衡解ではない。国民年金の積立度合が2120年度に1を大きく超えるのはそのため。<br><br>
+{spec["note"]}<br><br>
 年度末積立金の「2024年度価格」は賃金上昇率で割り戻したもので、運用で膨らんだ分を含む（現在価値ではない）。</div></div></div>
 <div class="notes">
 （注1）厚生年金は、公表の「厚生年金の財政見通し」と同じく被用者年金4制度（厚生年金・国共済・地共済・私学共済）の合計。「報酬比例」には厚生年金の独自給付（定額・加給・加算）を含む。<br>
 （注2）「積立度合」は前年度末積立金の当年度の支出合計に対する倍率。所得代替率はモデル世帯の年金額のその年度の現役男子の平均手取りに対する比率（基礎は夫婦2人分）。<br>
-（注3）現行制度の値は、厚生労働省「令和6(2024)年財政検証」詳細結果等の財政見通しと一致する（本リポジトリで全項目照合済み）。按分据置型は、公表された計算プログラムに独自のレバーを加えて計算した<b style="font-weight:bold">非公式の独自計算</b>で、厚生労働省の試算ではない。
+（注3）現行制度の値は、厚生労働省「令和6(2024)年財政検証」詳細結果等の財政見通しと一致する（本リポジトリで全項目照合済み）。{spec["label"]}は、公表された計算プログラムに独自のレバーを加えて計算した<b style="font-weight:bold">非公式の独自計算</b>で、厚生労働省の試算ではない。
 </div></div></body></html>"""
 
 
@@ -181,26 +207,36 @@ def find_chrome():
 
 
 def main():
+    global SCEN
+    ap = argparse.ArgumentParser(description="財政見通し対照表を作る")
+    ap.add_argument("--case", nargs="+", default=["3003", "3001"], help="試算番号（既定 3003 3001）")
+    ap.add_argument("--yobi", nargs="+", default=["501"], help="シナリオの予備番号（既定 501）")
+    a = ap.parse_args()
     outdir = os.path.join(HERE, "図")
     chrome = find_chrome()
     tmp = tempfile.mkdtemp()
-    for case in ("3003", "3001"):
-        name = f"財政見通し_按分据置_{case}"
-        html_path = os.path.join(tmp if chrome else outdir, name + ".html")
-        with open(html_path, "w", encoding="utf-8") as f:
-            f.write(page(case))
-        if not chrome:
-            print("Chromium が見つからないので HTML だけ書いた:", html_path)
-            continue
-        url = "file://" + html_path
-        base = [chrome, "--no-sandbox", "--hide-scrollbars"]
-        subprocess.run(base + ["--force-device-scale-factor=1.5", "--window-size=1240,1754",
-                               f"--screenshot={os.path.join(outdir, name + '.png')}", url],
-                       check=True, capture_output=True)
-        subprocess.run(base + ["--no-pdf-header-footer",
-                               f"--print-to-pdf={os.path.join(outdir, name + '.pdf')}", url],
-                       check=True, capture_output=True)
-        print("書き出し:", os.path.join(outdir, name + ".png"), "/ .pdf")
+    for yobi in a.yobi:
+        if yobi not in SCENARIOS:
+            sys.exit(f"予備番号 {yobi} は SCENARIOS 台帳にありません（{', '.join(SCENARIOS)}）")
+        spec = SCENARIOS[yobi]
+        SCEN = (spec["base"], (yobi, spec["yobi4"], spec["label"]))
+        for case in a.case:
+            name = f"対照表_{case}_{yobi}_{spec['name']}"
+            html_path = os.path.join(tmp if chrome else outdir, name + ".html")
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(page(case, spec))
+            if not chrome:
+                print("Chromium が見つからないので HTML だけ書いた:", html_path)
+                continue
+            url = "file://" + html_path
+            base = [chrome, "--no-sandbox", "--hide-scrollbars"]
+            subprocess.run(base + ["--force-device-scale-factor=1.5", "--window-size=1240,1754",
+                                   f"--screenshot={os.path.join(outdir, name + '.png')}", url],
+                           check=True, capture_output=True)
+            subprocess.run(base + ["--no-pdf-header-footer",
+                                   f"--print-to-pdf={os.path.join(outdir, name + '.pdf')}", url],
+                           check=True, capture_output=True)
+            print("書き出し:", os.path.join(outdir, name + ".png"), "/ .pdf")
     shutil.rmtree(tmp, ignore_errors=True)
 
 
