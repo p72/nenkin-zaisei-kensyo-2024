@@ -18,6 +18,11 @@
 #              一致の下では按分の置き方は勘定間の移転にすぎない）
 #   321        3号廃止 2027年度・納付率を SANGO_NOUFU_ALT に（感度）
 #   601        第1号の全員を第3号として登録（ICHIGO。思考実験、3号廃止の裏返し）
+#   541        適用拡大（約860万人）＋拠出金按分据置型。外枠 3403/3401 の上で流す。
+#              前提: 適用拡大（KAKUDAI=4）を①から流しておく
+#                WAKU=3403 KAKUDAI=4 YOBI=040 検証/実行/run_pipeline.sh 3003 1 1 0 2
+#                WAKU=3401 KAKUDAI=4 YOBI=040 検証/実行/run_pipeline.sh 3001
+#              無ければ飛ばす
 #
 # 使い方: 検証/3号廃止/run_sango.sh [実施年度(既定2027)] [感度用の納付率(既定0.8)]
 # =============================================================================
@@ -47,5 +52,11 @@ for CASE in "3003 1 1 0 2" "3001"; do
     run STEPS=45 YOBI=510 YOBI2=511 SANGO="$YEAR" SANGO_MODE=1 TOUGOU=1 "$RUN" "$@"
     run STEPS=45 YOBI=321 SANGO="$YEAR" SANGO_NOUFU="$NOUFU_ALT"   "$RUN" "$@"
     run STEPS=45 YOBI=601 ICHIGO="$YEAR"                           "$RUN" "$@"
+    KWAKU=$(( $1 + 400 ))   # 適用拡大の外枠（3003→3403、3001→3401）
+    if [ -d "$ROOT/work/suuri/rev2024/wakuc/rslt/ver_4_1/rslt$KWAKU" ]; then
+        run STEPS=45 WAKU=$KWAKU KAKUDAI=4 YOBI=541 SANGO="$YEAR" SANGO_MODE=1 "$RUN" "$@"
+    else
+        echo "（外枠 $KWAKU が無いので 541 を飛ばす。先に適用拡大を①から流す）"
+    fi
 done
 echo; echo "######## 3号廃止シナリオ 完了 ########"
