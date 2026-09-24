@@ -1,0 +1,13 @@
+# GitHub Pages（Jekyll）の設定。公開側 p72/nenkin-zaisei-kensyo-2024 をルートから公開する。
+# 非公開側で編集して 検証/実行/sync_public.py で写す（公開側で直接いじらない）。
+title: 公的年金 財政検証（2024年／令和6年）— 再現・Python移植・原本不具合の台帳
+description: >-
+  厚生労働省の2024年財政検証プログラムを動かし、Python に移植し、数理モデルを文書に復元した非公式の検証。
+  厚生労働省が作成したものではありません。
+lang: ja
+url: https://p72.github.io
+baseurl: /nenkin-zaisei-kensyo-2024
+
+plugins:
+  - jekyll-sitemap      # /sitemap.xml を自動生成（Google Search Console に登録する）
+  - jekyll-seo-tag      # 各ページに title・description のメタタグ
