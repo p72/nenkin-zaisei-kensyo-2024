@@ -254,8 +254,9 @@ iconv -f EUCJP-MS -t UTF-8 papers/001365945/プログラム/国民年金/main.c
 ### 手元で動かす
 
 ```bash
-git clone https://github.com/p72/0919nenkin.git
-cd 0919nenkin
+git clone https://github.com/p72/nenkin-zaisei-kensyo-2024.git
+cd nenkin-zaisei-kensyo-2024
+./fetch.sh                       # 厚労省の公表資料を papers/ に取得（約82MB、SHA256照合）
 ```
 
 **必要なもの**: `gcc`／`g++`、`iconv`（`EUCJP-MS` 対応）、`patch`、`python3`、
