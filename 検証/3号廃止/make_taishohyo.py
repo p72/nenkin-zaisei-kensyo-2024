@@ -56,6 +56,9 @@ YEARS = (2024, 2027, 2030, 2035, 2040, 2050, 2060, 2080, 2100, 2120)
 #          現行制度以外の2つのシナリオどうしも対照表にできる
 #   base_waku  比べる相手の外枠番号（省略時は試算番号）
 #   note3  表の下の注3（省略時は official フラグから決める）
+#   hirei_end  右下の表の「比例の調整終了年度」をシナリオの行だけ差し替える
+#          （試算番号 → 表示する文字列）。スライド以外の方法で報酬比例を
+#          削るシナリオ（国庫負担の廃止など）で使う
 SCENARIOS = {
     "501": dict(
         name="按分据置", label="按分据置型", yobi4="501", base=("000", "000", "現行制度"),
@@ -180,7 +183,7 @@ def rows(kind, kk, d):
     return "\n".join(out)
 
 
-def summary(d):
+def summary(d, spec=None, case=None):
     trs = []
     base = SCEN[0][0]
     for yb, _y4, lab, _w in SCEN:
@@ -188,6 +191,8 @@ def summary(d):
         ke = run["kiso_end"]; he = run["hirei_end"]
         kes = "調整なし" if ke <= 2024 else (f"{ke}（均衡せず）" if ke >= 2120 else f"{ke}")
         hes = "調整なし" if he <= 2024 else f"{he}"
+        if yb != base and spec and case in spec.get("hirei_end", {}):
+            hes = spec["hirei_end"][case]
         trs.append(f"<tr class='{'alt' if yb != base else 'base'}'><td class='lab'>{lab}</td>"
                    f"<td>{r['所得代替率']*100:.1f}%</td><td>{r['代替率(比例)']*100:.1f}%</td><td>{hes}</td>"
                    f"<td>{r['代替率(基礎)']*100:.1f}%</td><td>{kes}</td></tr>")
@@ -272,7 +277,7 @@ def page(case, spec):
 {rows("nat", kk, d)}</table>
 <div><table class="s"><tr><th rowspan="2"></th><th rowspan="2">所得代替率<br><small>調整終了後</small></th><th colspan="2">比例</th><th colspan="2">基礎</th></tr>
 <tr><th>水準</th><th>調整<br>終了年度</th><th>水準</th><th>調整<br>終了年度</th></tr>
-{summary(d)}</table>
+{summary(d, spec, case)}</table>
 <div class="notes" style="max-width:400px">
 {spec["note"]}<br><br>
 年度末積立金の「2024年度価格」は賃金上昇率で割り戻したもので、運用で膨らんだ分を含む（現在価値ではない）。</div></div></div>

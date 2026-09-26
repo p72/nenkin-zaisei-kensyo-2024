@@ -62,6 +62,24 @@
 #                 基礎年金の水準が国民年金勘定から切り離される。
 #                 給付側は触らない（未納・免除期間が納付済期間に変わる分の
 #                 給付増は入らない）。SANGO/NIGO と同じパッチ・同じ流し方。
+#   KOKKO   0/西暦4桁  厚生年金への国庫負担の廃止の実施年度（思考実験）。
+#                 ⑤収支計算で、被用者年金4制度の「国庫負担」を実施年度以降
+#                 収入に入れない（patches/kokko-cut.patch）。基礎年金拠出金は
+#                 そのまま払うので、拠出金の国庫負担分（1/2）も厚生年金の
+#                 保険料と積立金でまかなうことになる。失う収入（年12〜15兆円）は
+#                 マクロ経済スライドを2120年度まで続けても埋まらないので、
+#                 ⑤は現行どおりの調整経路のうえで、実施年度以降の報酬比例を
+#                 一律 m 倍（既裁定を含む）して2120年度に均衡する m を2分法で
+#                 求める。④（国民年金勘定・基礎年金の水準）は動かない。出力の
+#                 「国庫負担」は0になり、内訳の (再)国庫基礎 などの列に
+#                 「国が払わずに済んだ額」が残る。④の出力は通常試算と同じなので、
+#                 YOBI を変えて STEPS=45 で流す（ビルドは必要）。
+#                 TOUGOU・SAIMU とは組み合わせられない。
+#   KOKKO_MODE 0/1  国庫負担の廃止の調整方法（既定 0）
+#                 0: 報酬比例の一律削減で均衡させる
+#                 1: マクロ経済スライドだけで調整する。均衡しないので⑤は
+#                    「最終年度まで調整しても均衡できませんでした」と出し、
+#                    最終年度まで調整し続けた状態を出力する（確かめる用）
 #
 #   SAIMU   0/1/2  債務の試算（原本の機能。既定 0）
 #                 0: 通常試算
@@ -184,6 +202,8 @@ NIGO="${NIGO:-0}"
 SANGO_NOUFU="${SANGO_NOUFU:-1}"
 SANGO_MODE="${SANGO_MODE:-0}"
 ICHIGO="${ICHIGO:-0}"
+KOKKO="${KOKKO:-0}"
+KOKKO_MODE="${KOKKO_MODE:-0}"
 SAIMU="${SAIMU:-0}"
 WAKU_M="${WAKU_M:-$WAKU}"
 YOBI2="${YOBI2:-001}"
@@ -212,7 +232,8 @@ chk QX      "$QX"      1 2 3
 chk ROUDR   "$ROUDR"   1 2 3
 chk SAIMU   "$SAIMU"   0 1 2
 chk SANGO_MODE "$SANGO_MODE" 0 1
-for v in SANGO NIGO ICHIGO; do
+chk KOKKO_MODE "$KOKKO_MODE" 0 1
+for v in SANGO NIGO ICHIGO KOKKO; do
     eval "val=\$$v"
     case "$val" in
         0) ;;
@@ -231,6 +252,9 @@ fi
 # ⑤は Touitu>=1 のとき cuta/cutb を YOBI と YOBI2 の2組そろえて書き込み用に
 # 開く（fopn.c:158-190）。同じ番号だと同名のファイルを2つのハンドルで開いて
 # 中身が壊れるので、ここで止める。
+if [ "$KOKKO" != 0 ] && { [ "$TOUGOU" != 0 ] || [ "$SAIMU" != 0 ]; }; then
+    die "KOKKO は TOUGOU・SAIMU と組み合わせられません（報酬比例の一律削減が統一カット率・債務試算の前提と合わない）"
+fi
 if [ "$TOUGOU" = 1 ] && [ "$YOBI2" = "$YOBI" ]; then
     die "TOUGOU=1 のときは YOBI2（$YOBI2）を YOBI（$YOBI）と別の3桁にしてください"
 fi
@@ -308,6 +332,11 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
     if [ "$SANGO" != 0 ] || [ "$NIGO" != 0 ] || [ "$ICHIGO" != 0 ]; then
         step "号別被保険者の保険料負担レバーを④基礎年金に当てる（patches/sango-haishi.patch）"
         cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/sango-haishi.patch"
+    fi
+
+    if [ "$KOKKO" != 0 ]; then
+        step "厚生年金への国庫負担の廃止レバーを⑤収支計算に当てる（patches/kokko-cut.patch）"
+        cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/kokko-cut.patch"
     fi
 
     # 原本 snaps.h / stdfm.c が宣言する fdiv() は、新しい glibc の C23 縮小演算
@@ -501,14 +530,21 @@ step "⑤ 厚生年金 収支計算 を実行（所得代替率）"
 # grep をパイプで挟むと終了状態が隠れるので PIPESTATUS で本体の結果を見る
 # （ここを素通しにしていたため、⑤が buffer overflow で落ちても「完了」と
 #  表示してしまっていた）
+# 国庫負担の廃止レバーは⑤が環境変数で受け取る（patches/kokko-cut.patch）
+if [ "$KOKKO" != 0 ]; then export KOKKO_CUT="$KOKKO" KOKKO_MODE; else unset KOKKO_CUT KOKKO_MODE; fi
+emplog="$SUURI/emp/log/emp-$SHISAN-$SHISAN-$ECON-$WAKU-1120-$YOBI.log"
 cd "$SUURI/emp" && set +e
-emp_stdin | "$SUURI/emp/exec/asys20" | grep -A 4 "最終代替率"
+emp_stdin | "$SUURI/emp/exec/asys20" | tee "$emplog" | grep -A 4 "最終代替率\|国庫負担の廃止\|均衡できません\|収束しません"
 rc=${PIPESTATUS[1]}
 set -e
 if [ "$rc" != "0" ]; then
     echo
     echo "★ ⑤ 収支計算 が異常終了しました（終了コード $rc）" >&2
     exit "$rc"
+fi
+# パッチの当たっていない⑤に環境変数だけ渡すと黙って通常試算になるので止める
+if [ "$KOKKO" != 0 ] && ! grep -q "国庫負担の廃止" "$emplog"; then
+    die "KOKKO=$KOKKO を指定しましたが⑤にレバーが効いていません（ビルドにパッチが当たっていない）。SKIP_BUILD を外してください"
 fi
 
 if [ "$TOUGOU" = 1 ] && run_step 4; then
@@ -538,4 +574,7 @@ if [ "$SANGO" != 0 ] || [ "$NIGO" != 0 ]; then
 fi
 if [ "$ICHIGO" != 0 ]; then
     echo "  追加   第1号の第3号登録 $ICHIGO 年度（原本にないレバー・思考実験）"
+fi
+if [ "$KOKKO" != 0 ]; then
+    echo "  追加   厚生年金への国庫負担の廃止 $KOKKO 年度・調整方法 $KOKKO_MODE（原本にないレバー・思考実験）"
 fi
