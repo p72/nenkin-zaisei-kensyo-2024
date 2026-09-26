@@ -1,0 +1,120 @@
+diff -ruN "a/\345\216\232\347\224\237\345\271\264\351\207\221/\345\217\216\346\224\257\350\250\210\347\256\227/shus_calc.c" "b/\345\216\232\347\224\237\345\271\264\351\207\221/\345\217\216\346\224\257\350\250\210\347\256\227/shus_calc.c"
+--- "a/\345\216\232\347\224\237\345\271\264\351\207\221/\345\217\216\346\224\257\350\250\210\347\256\227/shus_calc.c"	2026-09-26 01:04:59.585492648 +0000
++++ "b/\345\216\232\347\224\237\345\271\264\351\207\221/\345\217\216\346\224\257\350\250\210\347\256\227/shus_calc.c"	2026-09-26 02:04:14.562000694 +0000
+@@ -6,6 +6,45 @@
+ #include "set.h"
+ #include "glva.h"
+ 
++/* ------------------------------------------------------------------
++ * 厚生年金への国庫負担の廃止 — 原本にはない追加レバー（思考実験）
++ *
++ *   KOKKO_CUT  国庫負担を収入に入れない最初の年度（西暦4桁）。0/未設定なら何もしない
++ *   KOKKO_MODE 0: 報酬比例の一律削減で均衡させる（既定）
++ *              1: マクロ経済スライドだけで調整する（均衡しないことを確かめる用）
++ *
++ * 被用者年金4制度（厚年・国共済・地共済・私学）の「国庫負担」（Cc[ii][4]）を
++ * 実施年度以降0にする。基礎年金拠出金（Cc[ii][16]）はそのまま払うので、
++ * 拠出金の国庫負担分（1/2）も保険料と積立金でまかなうことになる。
++ * 内訳の (再)国庫基礎・経過比例・経過定額・かさ上げ（Cc[ii][5〜8]）は
++ * 0にせず残す。出力では「国庫負担」の列が0、内訳の列が「国が払わずに
++ * 済んだ額」になる。④基礎年金（国民年金勘定）には触らない。
++ *
++ * 失う収入は年12〜15兆円で、マクロ経済スライド（年1%前後）を2120年度まで
++ * 続けても均衡しない。そこで shus_calc8() は、まず国庫負担ありで現行どおりの
++ * 調整経路を求め、そのうえで実施年度以降の報酬比例の給付を一律に m 倍して、
++ * 2120年度に均衡する m を2分法で求める（既に受け取っている人も含む）。
++ * KOKKO_MODE=1 では国庫負担なしのまま現行どおりスライドの終了年度を探す。
++ * 均衡しなければ原本のとおり「均衡できませんでした」と出し、最終年度まで
++ * 調整し続けた状態で出力する。
++ * ------------------------------------------------------------------ */
++static int Kokko_Cut = -1;   /* 実施年度（西暦下2桁）。0なら何もしない */
++static int Kokko_Mode = 0;   /* 0: 一律削減 1: スライドだけ */
++static int Kokko_Off = 0;    /* 1のあいだは国庫負担を0にしない */
++
++static void kokko_init(void){
++	const char *env_kokko;
++	if(Kokko_Cut >= 0) return;
++	Kokko_Cut = 0;
++	env_kokko = getenv("KOKKO_CUT");
++	if(env_kokko != NULL && atoi(env_kokko) > 2000){
++		Kokko_Cut = atoi(env_kokko) - 2000;
++		if(getenv("KOKKO_MODE") != NULL) Kokko_Mode = atoi(getenv("KOKKO_MODE"));
++		printf("厚生年金への国庫負担の廃止：%d年度から、%s（原本にないレバー）\n", Kokko_Cut + 2000,
++		       Kokko_Mode == 1 ? "マクロ経済スライドだけで調整" : "報酬比例の一律削減で均衡");
++	}
++}
++
+ 
+ void shus_shushi(int ks, int ke){
+ 	int k;
+@@ -14,10 +53,13 @@
+ 	is=1;
+ 	ie=4;
+ 	
++	kokko_init();
++	
+ 	for(k=ks; k<=ke; k++){
+ 		for(ii=is; ii<=ie; ii++){
+ 			Cc[ii][4][k-STTY]  =  Cc[ii][5][k-STTY] + Cc[ii][6][k-STTY]
+ 			                    + Cc[ii][7][k-STTY] + Cc[ii][8][k-STTY];
++			if(Kokko_Cut > 0 && Kokko_Off == 0 && k >= Kokko_Cut) Cc[ii][4][k-STTY] = 0.;
+ 			Cc[ii][12][k-STTY] =  Cc[ii][13][k-STTY] + Cc[ii][14][k-STTY] + Cc[ii][15][k-STTY];
+ 			Cc[ii][11][k-STTY] =  Cc[ii][12][k-STTY] + Cc[ii][16][k-STTY]
+ 			                    + Cc[ii][17][k-STTY] + Cc[ii][18][k-STTY];
+@@ -197,6 +239,9 @@
+ 	ii=0;
+ 	
+ 	k_jisseki = 24;
++	
++	kokko_init();
++	Kokko_Off = (Kokko_Mode == 1) ? 0 : 1;   /* 一律削減では、調整経路を国庫負担ありの現行制度で求める */
+ 
+ 	kend = atoi(Cutrfile3) + 100;
+ 	kn = kend + 1;
+@@ -334,6 +379,46 @@
+ 		printf("収束しませんでした\n");
+ 		return(1);
+ 	}
++	
++	Kokko_Off = 0;
++	if(Kokko_Cut > 0 && Kokko_Mode != 1){
++		static double kbase[ECEDY-ECSTY+1][116-ECXA];
++		double m, m0 = 0.0, m1 = 1.0, fk;
++		int kc = MAX(Kokko_Cut, Kijun+1);
++		
++		for(k=kc; k<=Ke; k++){
++			for(x=XA-1; x<=XB; x++) kbase[k-ECSTY][x-ECXA] = Escutrrh[k-ECSTY][x-ECXA];
++		}
++		/* n=0 は m=1（削らない）、n=1 は m=0（報酬比例を全部削る）で端を調べる */
++		for(n=0; n<=62; n++){
++			if(n == 0)      m = 1.0;
++			else if(n == 1) m = 0.0;
++			else if(n < 62) m = (m0 + m1) / 2.0;
++			else            m = m0;          /* 最後は均衡する側の値で状態をそろえる */
++			for(k=kc; k<=Ke; k++){
++				for(x=XA-1; x<=XB; x++) Escutrrh[k-ECSTY][x-ECXA] = kbase[k-ECSTY][x-ECXA] * m;
++			}
++			shus_ave(kc, Ke, 1, 1);
++			shus_shushi(kc, Ke);
++			if(n == 62) break;
++			fk = Cc[ii][20][kend-1-STTY] - Cc[ii][11][kend-STTY] * Ca;
++			if(n == 0){
++				if(fk >= 0.0){ m0 = 1.0; break; }
++			} else if(n == 1){
++				if(fk < 0.0){
++					printf("国庫負担の廃止：報酬比例を全部削っても均衡しません\n");
++					m0 = 0.0;
++					n = 61;
++				}
++			} else if(fk >= 0.0){
++				m0 = m;
++			} else {
++				m1 = m;
++			}
++		}
++		printf("国庫負担の廃止：報酬比例を%d年度から一律 %.13f 倍（%.4f%%削減）で均衡\n",
++		       kc + 2000, m0, (1.0 - m0) * 100.0);
++	}
+ 	if(Touitu>=1){
+ 		for(k=5; k<=Ke; k++){
+ 			for(x=XA-1; x<=XB; x++){
