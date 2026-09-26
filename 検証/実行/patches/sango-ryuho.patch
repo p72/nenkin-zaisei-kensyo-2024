@@ -1,0 +1,118 @@
+diff -ruN "a/\345\216\232\347\224\237\345\271\264\351\207\221/\345\217\216\346\224\257\350\250\210\347\256\227/shus_calc.c" "b/\345\216\232\347\224\237\345\271\264\351\207\221/\345\217\216\346\224\257\350\250\210\347\256\227/shus_calc.c"
+--- "a/\345\216\232\347\224\237\345\271\264\351\207\221/\345\217\216\346\224\257\350\250\210\347\256\227/shus_calc.c"	2026-09-26 02:31:55.722416300 +0000
++++ "b/\345\216\232\347\224\237\345\271\264\351\207\221/\345\217\216\346\224\257\350\250\210\347\256\227/shus_calc.c"	2026-09-26 02:32:19.725194090 +0000
+@@ -32,6 +32,53 @@
+ static int Kokko_Mode = 0;   /* 0: 一律削減 1: スライドだけ */
+ static int Kokko_Off = 0;    /* 1のあいだは国庫負担を0にしない */
+ 
++/* ------------------------------------------------------------------
++ * 第3号被保険者の保険料を厚生年金勘定に入れる「厚年留保案」 — 原本にはない追加レバー
++ *
++ *   RYUHO_FILE  年度ごとの制度別の追加保険料（円・年額）のファイル。未設定なら何もしない。
++ *               1行 = 西暦,厚年,国共,地共,私学（検証/実行/ryuho_hokenryo.py が④の出力から作る）
++ *
++ * 第3号の保険料を、その第3号の配偶者が入っている被用者年金の保険料収入（Cc[ii][1]）に
++ * 足す。基礎年金拠出金の按分（④）は触らないので、国民年金勘定と基礎年金の水準は動かない。
++ * shus_calc8() は、まず追加の保険料なしで現行どおりの調整経路と2120年度の積立度合を求め、
++ * そのうえで追加の保険料を入れ、実施年度以降の厚生年金保険料率を一律に Δ 引き下げて、
++ * 2120年度の積立度合が現行制度と同じになる Δ を2分法で求める。報酬比例の調整経路は
++ * 現行制度のまま。引き下げは「標準報酬総額（An[ii][0]）× Δ」を保険料収入から引く
++ * （4制度とも同じ Δ、年度の途中の改定は考えない）。所得代替率の手取りの計算に使う
++ * 保険料率（Prema）は変えない。
++ * ------------------------------------------------------------------ */
++static int Ryuho_On = -1;          /* 1: ファイルを読んだ */
++static int Ryuho_Yr = 0;           /* 追加の保険料が立つ最初の年度（西暦下2桁） */
++static int Ryuho_Off = 0;          /* 1のあいだは追加の保険料も引き下げも入れない */
++static int Ryuho_Saved = 0;
++static double Ryuho_Delta = 0.;    /* 保険料率の引き下げ幅 */
++static double Ryuho_Add[5][200];   /* [制度][西暦下2桁] 追加の保険料（円） */
++static double Ryuho_Base[5][200];  /* 原本が計算した保険料収入 */
++
++static void ryuho_init(void){
++	const char *fn;
++	FILE *fp;
++	int y, ii;
++	double a[4];
++	if(Ryuho_On >= 0) return;
++	Ryuho_On = 0;
++	fn = getenv("RYUHO_FILE");
++	if(fn == NULL || fn[0] == '\0') return;
++	if((fp = fopen(fn, "r")) == NULL){
++		printf("厚年留保案のファイルが開けません（%s）\n", fn);
++		exit(1);
++	}
++	while(fscanf(fp, "%d,%lf,%lf,%lf,%lf", &y, &a[0], &a[1], &a[2], &a[3]) == 5){
++		y -= 2000;
++		if(y < 0 || y >= 200) continue;
++		for(ii=1; ii<=4; ii++) Ryuho_Add[ii][y] = a[ii-1];
++		if(Ryuho_Yr == 0 && a[0] + a[1] + a[2] + a[3] > 0.) Ryuho_Yr = y;
++	}
++	fclose(fp);
++	Ryuho_On = 1;
++	printf("厚年留保案：第3号の保険料を%d年度から厚生年金勘定に入れる（原本にないレバー）\n", Ryuho_Yr + 2000);
++}
++
+ static void kokko_init(void){
+ 	const char *env_kokko;
+ 	if(Kokko_Cut >= 0) return;
+@@ -54,9 +101,24 @@
+ 	ie=4;
+ 	
+ 	kokko_init();
++	ryuho_init();
++	if(Ryuho_On == 1 && Ryuho_Saved == 0){
++		for(ii=is; ii<=ie; ii++){
++			for(k=Ks+1; k<=Ke; k++) Ryuho_Base[ii][k] = Cc[ii][1][k-STTY];
++		}
++		Ryuho_Saved = 1;
++	}
+ 	
+ 	for(k=ks; k<=ke; k++){
+ 		for(ii=is; ii<=ie; ii++){
++			if(Ryuho_On == 1){
++				Cc[ii][1][k-STTY] = Ryuho_Base[ii][k];
++				if(Ryuho_Off == 0 && Ryuho_Yr > 0 && k >= Ryuho_Yr){
++					Cc[ii][1][k-STTY] += Ryuho_Add[ii][k] - Ryuho_Delta * An[ii][0][k-STTY];
++				}
++				if(ii == is) Cc[0][1][k-STTY]  = Cc[ii][1][k-STTY];
++				else         Cc[0][1][k-STTY] += Cc[ii][1][k-STTY];
++			}
+ 			Cc[ii][4][k-STTY]  =  Cc[ii][5][k-STTY] + Cc[ii][6][k-STTY]
+ 			                    + Cc[ii][7][k-STTY] + Cc[ii][8][k-STTY];
+ 			if(Kokko_Cut > 0 && Kokko_Off == 0 && k >= Kokko_Cut) Cc[ii][4][k-STTY] = 0.;
+@@ -242,6 +304,8 @@
+ 	
+ 	kokko_init();
+ 	Kokko_Off = (Kokko_Mode == 1) ? 0 : 1;   /* 一律削減では、調整経路を国庫負担ありの現行制度で求める */
++	ryuho_init();
++	Ryuho_Off = 1;   /* 調整経路と2120年度の積立度合は、第3号の保険料なしの現行制度で求める */
+ 
+ 	kend = atoi(Cutrfile3) + 100;
+ 	kn = kend + 1;
+@@ -419,6 +483,26 @@
+ 		printf("国庫負担の廃止：報酬比例を%d年度から一律 %.13f 倍（%.4f%%削減）で均衡\n",
+ 		       kc + 2000, m0, (1.0 - m0) * 100.0);
+ 	}
++	
++	if(Ryuho_On == 1 && Ryuho_Yr > 0){
++		double t, d0 = 0.0, d1 = 0.05, fr;
++		/* 現行制度（追加の保険料なし）の2120年度の積立度合 */
++		Ryuho_Off = 1;
++		shus_ave(Kijun, Ke, 1, 1);
++		shus_shushi(Kijun+1, Ke);
++		t = Cc[ii][20][kend-1-STTY] / Cc[ii][11][kend-STTY];
++		Ryuho_Off = 0;
++		for(n=0; n<=100; n++){
++			Ryuho_Delta = (n < 100) ? (d0 + d1) / 2.0 : d0;
++			shus_shushi(Kijun+1, Ke);
++			if(n == 100) break;
++			fr = Cc[ii][20][kend-1-STTY] - t * Cc[ii][11][kend-STTY];
++			if(fr >= 0.0) d0 = Ryuho_Delta; else d1 = Ryuho_Delta;
++		}
++		if(d0 > 0.0499) printf("厚年留保案：引き下げ幅が探索の上限（5%%）に当たりました\n");
++		printf("厚年留保案：保険料率を%d年度から %.13f（%.4f%%pt）引き下げると2120年度の積立度合 %.10f を保つ\n",
++		       Ryuho_Yr + 2000, d0, d0 * 100.0, t);
++	}
+ 	if(Touitu>=1){
+ 		for(k=5; k<=Ke; k++){
+ 			for(x=XA-1; x<=XB; x++){

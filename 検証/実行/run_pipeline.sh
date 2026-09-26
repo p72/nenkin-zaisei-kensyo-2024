@@ -80,6 +80,17 @@
 #                 1: マクロ経済スライドだけで調整する。均衡しないので⑤は
 #                    「最終年度まで調整しても均衡できませんでした」と出し、
 #                    最終年度まで調整し続けた状態を出力する（確かめる用）
+#   RYUHO   0/西暦4桁  第3号の保険料を厚生年金勘定に入れる「厚年留保案」の実施年度。
+#                 第3号（20〜59歳）が国民年金保険料相当額×RYUHO_RITU を払い、
+#                 その保険料を配偶者の被用者年金の保険料収入に足す
+#                 （patches/sango-ryuho.patch、kokko-cut.patch の上に当てる）。
+#                 基礎年金拠出金の按分（④）は動かさないので、国民年金勘定と
+#                 基礎年金の水準は変わらない。⑤は、報酬比例の調整経路を現行
+#                 どおりにしたまま、2120年度の積立度合が現行制度と同じになる
+#                 厚生年金保険料率の引き下げ幅を2分法で求める。第3号の人数と
+#                 保険料月額は④の出力から ryuho_hokenryo.py が作る。
+#                 YOBI を変えて STEPS=45 で流す（ビルドは必要）。
+#   RYUHO_RITU 0〜1  厚年留保案で第3号が払う保険料の、国民年金保険料に対する割合（既定 1）
 #
 #   SAIMU   0/1/2  債務の試算（原本の機能。既定 0）
 #                 0: 通常試算
@@ -204,6 +215,8 @@ SANGO_MODE="${SANGO_MODE:-0}"
 ICHIGO="${ICHIGO:-0}"
 KOKKO="${KOKKO:-0}"
 KOKKO_MODE="${KOKKO_MODE:-0}"
+RYUHO="${RYUHO:-0}"
+RYUHO_RITU="${RYUHO_RITU:-1}"
 SAIMU="${SAIMU:-0}"
 WAKU_M="${WAKU_M:-$WAKU}"
 YOBI2="${YOBI2:-001}"
@@ -233,7 +246,7 @@ chk ROUDR   "$ROUDR"   1 2 3
 chk SAIMU   "$SAIMU"   0 1 2
 chk SANGO_MODE "$SANGO_MODE" 0 1
 chk KOKKO_MODE "$KOKKO_MODE" 0 1
-for v in SANGO NIGO ICHIGO KOKKO; do
+for v in SANGO NIGO ICHIGO KOKKO RYUHO; do
     eval "val=\$$v"
     case "$val" in
         0) ;;
@@ -252,6 +265,13 @@ fi
 # ⑤は Touitu>=1 のとき cuta/cutb を YOBI と YOBI2 の2組そろえて書き込み用に
 # 開く（fopn.c:158-190）。同じ番号だと同名のファイルを2つのハンドルで開いて
 # 中身が壊れるので、ここで止める。
+if ! awk -v r="$RYUHO_RITU" 'BEGIN{ exit !(r+0 > 0 && r+0 <= 1) }'; then
+    die "RYUHO_RITU の値が不正です: 「$RYUHO_RITU」（0 より大きく 1 以下）"
+fi
+if [ "$RYUHO" != 0 ] && { [ "$TOUGOU" != 0 ] || [ "$SAIMU" != 0 ] || [ "$KOKKO" != 0 ] \
+        || [ "$SANGO" != 0 ] || [ "$NIGO" != 0 ] || [ "$ICHIGO" != 0 ]; }; then
+    die "RYUHO は TOUGOU・SAIMU・KOKKO・SANGO・NIGO・ICHIGO と組み合わせられません"
+fi
 if [ "$KOKKO" != 0 ] && { [ "$TOUGOU" != 0 ] || [ "$SAIMU" != 0 ]; }; then
     die "KOKKO は TOUGOU・SAIMU と組み合わせられません（報酬比例の一律削減が統一カット率・債務試算の前提と合わない）"
 fi
@@ -334,9 +354,13 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
         cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/sango-haishi.patch"
     fi
 
-    if [ "$KOKKO" != 0 ]; then
+    if [ "$KOKKO" != 0 ] || [ "$RYUHO" != 0 ]; then
         step "厚生年金への国庫負担の廃止レバーを⑤収支計算に当てる（patches/kokko-cut.patch）"
         cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/kokko-cut.patch"
+    fi
+    if [ "$RYUHO" != 0 ]; then
+        step "厚年留保案のレバーを⑤収支計算に当てる（patches/sango-ryuho.patch）"
+        cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/sango-ryuho.patch"
     fi
 
     # 原本 snaps.h / stdfm.c が宣言する fdiv() は、新しい glibc の C23 縮小演算
@@ -532,9 +556,19 @@ step "⑤ 厚生年金 収支計算 を実行（所得代替率）"
 #  表示してしまっていた）
 # 国庫負担の廃止レバーは⑤が環境変数で受け取る（patches/kokko-cut.patch）
 if [ "$KOKKO" != 0 ]; then export KOKKO_CUT="$KOKKO" KOKKO_MODE; else unset KOKKO_CUT KOKKO_MODE; fi
+# 厚年留保案は④の出力（第3号の人数・保険料月額）から追加の保険料を作って⑤に渡す
+if [ "$RYUHO" != 0 ]; then
+    RYUHO_FILE="$SUURI/emp/data/ryuho-$SHISAN-$SHISAN-$ECON-$WAKU-1120-$YOBI.csv"
+    python3 "$HERE/ryuho_hokenryo.py" \
+        "$SUURI/bas/rslt/kekka$SHISAN-$SHISAN-$ECON-$WAKU-1120-${YOBI}a.csv" \
+        "$RYUHO" "$RYUHO_RITU" > "$RYUHO_FILE" || die "厚年留保案の保険料ファイルを作れませんでした"
+    export RYUHO_FILE
+else
+    unset RYUHO_FILE
+fi
 emplog="$SUURI/emp/log/emp-$SHISAN-$SHISAN-$ECON-$WAKU-1120-$YOBI.log"
 cd "$SUURI/emp" && set +e
-emp_stdin | "$SUURI/emp/exec/asys20" | tee "$emplog" | grep -A 4 "最終代替率\|国庫負担の廃止\|均衡できません\|収束しません"
+emp_stdin | "$SUURI/emp/exec/asys20" | tee "$emplog" | grep -A 4 "最終代替率\|国庫負担の廃止\|厚年留保案\|均衡できません\|収束しません"
 rc=${PIPESTATUS[1]}
 set -e
 if [ "$rc" != "0" ]; then
@@ -543,6 +577,9 @@ if [ "$rc" != "0" ]; then
     exit "$rc"
 fi
 # パッチの当たっていない⑤に環境変数だけ渡すと黙って通常試算になるので止める
+if [ "$RYUHO" != 0 ] && ! grep -q "厚年留保案：保険料率" "$emplog"; then
+    die "RYUHO=$RYUHO を指定しましたが⑤にレバーが効いていません（ビルドにパッチが当たっていない）。SKIP_BUILD を外してください"
+fi
 if [ "$KOKKO" != 0 ] && ! grep -q "国庫負担の廃止" "$emplog"; then
     die "KOKKO=$KOKKO を指定しましたが⑤にレバーが効いていません（ビルドにパッチが当たっていない）。SKIP_BUILD を外してください"
 fi
@@ -577,4 +614,7 @@ if [ "$ICHIGO" != 0 ]; then
 fi
 if [ "$KOKKO" != 0 ]; then
     echo "  追加   厚生年金への国庫負担の廃止 $KOKKO 年度・調整方法 $KOKKO_MODE（原本にないレバー・思考実験）"
+fi
+if [ "$RYUHO" != 0 ]; then
+    echo "  追加   厚年留保案 $RYUHO 年度・保険料の割合 $RYUHO_RITU（原本にないレバー）"
 fi
