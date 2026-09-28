@@ -13,7 +13,8 @@
 使い方（リポジトリの直下で）
   python3 勉強/応用編/税方式7万円.py run 3003 1 1 0 2   # ④⑤を流す（高成長実現は run 3001）
   python3 勉強/応用編/税方式7万円.py report              # 財源・所得税の上乗せ率・所得代替率
-  python3 勉強/応用編/税方式7万円.py kakei               # 家計の負担の変化
+  python3 勉強/応用編/税方式7万円.py kakei               # 家計の負担の変化（厚生年金保険料を定率で下げる）
+  python3 勉強/応用編/税方式7万円.py kakei teigaku       # 同じ総額を1人あたり定額で下げる場合
   python3 勉強/応用編/税方式7万円.py table 3003 3001     # 財政見通し対照表（勉強/応用編/図/）
 """
 import importlib.util
@@ -166,10 +167,49 @@ def kaishain(nenshu, kounen_ritu):
     return kounen, tax, hyo
 
 
-def kakei():
+def kaishain_teigaku(nenshu, gen):
+    """厚生年金保険料（本人分）を年 gen 円だけ定額で下げた会社員（保険料は0より下げない）。"""
+    hyo = min(nenshu, 650_000 * 12)
+    k0 = hyo * 0.183 / 2
+    k1 = max(0.0, k0 - gen)
+    other = min(nenshu, 1_390_000 * 12) * 0.05 + nenshu * 0.006
+    t1 = shotokuzei(nenshu - kyuyo_kojo(nenshu) - 480_000 - k1 - other)
+    return k0 - k1, t1
+
+
+def teigaku_gaku(case, d):
+    """定率 Δ の引き下げと同じ総額を、厚生年金の加入者1人あたり定額にした本人分の年額（2024年度の賃金水準）。
+    総額 ＝ Δ × 標準報酬総額（2024年度）、人数 ＝ ④の拠出金算定対象者の2号（4制度計、20〜59歳）。"""
+    co, _, a = _mods()
+    v = f"{case}-{case}-{case}-{case}"
+    kb = a.read_blocks(os.path.join(SUURI, "bas", "rslt", f"kekka{v}-1120-000a.csv"))
+    h, rows = kb["拠出金算定対象者"]
+    ninzu = {int(r[0]): sum(r[h.index(c)] for c in ("厚年２号", "国共２号", "地共２号", "私学２号")) for r in rows}
+    wb = co.read_emp(v, "000", SH)[2024]["標準報酬総額"] * 1e12
+    return d * wb / ninzu[2024] / 2, ninzu[2024]
+
+
+def kakei(teigaku=False):
     for case, cname in CASES:
         z, d = zaigen(case)
         r = z[START]["ritu"]
+        if teigaku:
+            gen, nin = teigaku_gaku(case, d)
+            print(f"## {cname}（{START}年度の率：厚生年金保険料を1人あたり本人分 年{gen:,.0f}円（月{gen / 12:,.0f}円）"
+                  f"定額で下げる（定率 −{d * 100:.2f}％pt と同じ総額、加入者 {nin / 1e4:,.0f}万人）、所得税の上乗せ "
+                  f"{r * 100:.0f}%。2024年度の賃金水準・税制、年額）")
+            print("| 世帯 | 保険料の減 | 所得税の増 | 差し引き（＋は負担増） | 参考：定率で下げた場合の差し引き |")
+            print("|---|---|---|---|---|")
+            for n in (1_500_000, 3_000_000, 5_000_000, 8_000_000, 12_000_000):
+                k0, t0, _ = kaishain(n, 0.183)
+                k1, t1, _ = kaishain(n, 0.183 - d)
+                ritsu = t1 * (1 + r) - t0 - (k0 - k1)
+                g, tt = kaishain_teigaku(n, gen)
+                dz = tt * (1 + r) - t0
+                print(f"| 会社員・単身 年収{n // 10000}万円 | −{g:,.0f}円 | +{dz:,.0f}円 | "
+                      + f"{dz - g:+,.0f}円".replace("-", "−") + " | " + f"{ritsu:+,.0f}円".replace("-", "−") + " |")
+            print()
+            continue
         print(f"## {cname}（{START}年度の率：厚生年金保険料率 −{d * 100:.2f}％pt、所得税の上乗せ {r * 100:.0f}%。"
               "2024年度の賃金水準・税制、年額）")
         print("| 世帯 | 保険料の減 | 所得税の増 | 差し引き（＋は負担増） | 参考：会社の保険料の減 |")
@@ -295,6 +335,8 @@ if __name__ == "__main__":
         report()
     elif a == ["kakei"]:
         kakei()
+    elif a == ["kakei", "teigaku"]:
+        kakei(teigaku=True)
     elif a[:1] == ["table"] and len(a) >= 2:
         table(a[1:])
     else:
