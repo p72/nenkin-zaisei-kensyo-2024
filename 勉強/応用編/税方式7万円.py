@@ -16,6 +16,8 @@
   python3 勉強/応用編/税方式7万円.py kakei               # 家計の負担の変化（厚生年金保険料を定率で下げる）
   python3 勉強/応用編/税方式7万円.py kakei teigaku       # 同じ総額を1人あたり定額で下げる場合
   python3 勉強/応用編/税方式7万円.py table 3003 3001     # 財政見通し対照表（勉強/応用編/図/）
+  python3 勉強/応用編/税方式7万円.py youin              # 給付が増える理由の要因分解
+  python3 勉強/応用編/税方式7万円.py shohi              # 追加の税を消費税でまかなった場合の税率
 """
 import importlib.util
 import os
@@ -31,6 +33,7 @@ START = 2027
 YOBI = "901"
 GETSU = 70000                  # 実施年度（2027年度）の月額
 SHOTOKU_2025 = 25.3e12         # 所得税収（一般会計、2025年度決算）。財務省「一般会計税収の推移」
+SHOHI_2025 = 26.0e12           # 消費税収（国の分、税率7.8%相当、2025年度決算）。同上
 CASES = (("3003", "過去30年投影"), ("3001", "高成長実現"))
 YEARS = (2027, 2030, 2040, 2050, 2060, 2080, 2100, 2120)
 
@@ -235,6 +238,69 @@ def kakei(teigaku=False):
         print()
 
 
+def discount(case):
+    """経済前提の名目運用利回りで2024年度末に割り引く係数。"""
+    rows = {int(float(l.split(",")[0])) + 2000: [float(x) for x in l.split(",")]
+            for l in open(os.path.join(SUURI, "emp", "data", "u-rev", "econ", f"econ-{case}.csv"))}
+    D, d = {2024: 1.0}, 1.0
+    for y in range(2025, 2121):
+        r = rows.get(y, rows[max(rows)])
+        d /= (1 + r[1] / 100) * (1 + r[6] / 100)
+        D[y] = d
+    return D
+
+
+def youin():
+    """65歳以上への給付が現行制度の老齢基礎年金より増える分を、3つの要因に分ける（推定）。
+
+      現行の満額 M0(y)   ＝ モデル世帯の基礎年金（⑤、67歳のカット率）÷ 2
+      満額換算の受給者 F0 ＝ 現行の老齢基礎年金の給付費（④）÷（M0 × 12）
+      ① 給付水準       ＝ 65歳以上人口 ×（7万円 − M0）× 12            … スライドをかけない
+      ② 人数・満額化   ＝ 65歳以上人口 ×（1 − f）× M0 × 12            … 全員に満額（f は2027年度の F0 ÷ 人口）
+      ③ 既裁定の連動   ＝（f × 65歳以上人口 − F0）× M0 × 12           … 68歳以降も賃金に連動
+    ①＋②＋③ は、65歳以上への給付 − 現行の老齢基礎年金の給付費 に一致する。"""
+    co, _, a = _mods()
+    for case, cname in CASES:
+        v = f"{case}-{case}-{case}-{case}"
+        kb = a.read_blocks(os.path.join(SUURI, "bas", "rslt", f"kekka{v}-1120-000a.csv"))
+        rou = {int(r[0]): r[7] for r in kb["基礎年金給付費（新法＋旧法）"][1]}   # 老齢・制度計
+        z, _ = zaigen(case)
+        kw, r0, D = tedori(case), co.read_rate(v, "000", SH), discount(case)
+        m0 = {y: r0[y]["代替率(基礎)"] / 2 * kw[y] for y in range(START, 2121)}
+        f = rou[START] / (m0[START] * 12) / z[START]["pop"]
+        print(f"## {cname}（2027年度の満額換算の受給者は65歳以上の {f * 100:.0f}%）")
+        print("| 年度 | 満額：現行 → 税方式 | 65歳以上 | 満額換算の受給者 | 給付の増 | ①給付水準 | ②人数・満額化 | ③既裁定の連動 |")
+        print("|---|---|---|---|---|---|---|---|")
+        pv = [0.0, 0.0, 0.0, 0.0]
+        for y in range(START, 2121):
+            P, g, M = z[y]["pop"], z[y]["getsu"], m0[y]
+            F0 = rou[y] / (M * 12)
+            c = [z[y]["kyufu"] - rou[y], P * (g - M) * 12, P * (1 - f) * M * 12, (f * P - F0) * M * 12]
+            pv = [p + x * D[y] for p, x in zip(pv, c)]
+            if y in YEARS:
+                print(f"| {y} | {M:,.0f} → {g:,.0f}円 | {P / 1e4:,.0f}万人 | {F0 / 1e4:,.0f}万人 | {c[0] / 1e12:.1f}兆円 | "
+                      f"{c[1] / 1e12:.1f}兆円 | {c[2] / 1e12:.1f}兆円 | {c[3] / 1e12:.1f}兆円 |")
+        print(f"| 2027〜2120年度の現在価値 | | | | **{pv[0] / 1e12:.0f}兆円** | **{pv[1] / 1e12:.0f}兆円** | "
+              f"**{pv[2] / 1e12:.0f}兆円** | **{pv[3] / 1e12:.0f}兆円** |")
+        print()
+
+
+def shohi():
+    """追加の税を消費税でまかなった場合の税率（推定）。1ポイントあたりの税収は、2025年度決算の
+    国の消費税収 ÷ 7.8 を標準報酬総額の伸びで延ばしたもの。上げた分は全部国に入る前提。"""
+    co, _, _ = _mods()
+    print("| 年度 | " + " | ".join(f"{n}：上げ幅 | {n}：消費税率" for _, n in CASES) + " |")
+    print("|---|" + "---|---|" * len(CASES))
+    res = {}
+    for case, _ in CASES:
+        z, _ = zaigen(case)
+        e0 = co.read_emp(f"{case}-{case}-{case}-{case}", "000", SH)
+        res[case] = {y: z[y]["extra"] / (SHOHI_2025 / 7.8 * e0[y]["標準報酬総額"] / e0[2025]["標準報酬総額"])
+                     for y in YEARS}
+    for y in YEARS:
+        print(f"| {y} | " + " | ".join(f"+{res[c][y]:.1f}pt | {10 + res[c][y]:.1f}%" for c, _ in CASES) + " |")
+
+
 # ---------------------------------------------------------------------------
 # 対照表
 # ---------------------------------------------------------------------------
@@ -335,6 +401,10 @@ if __name__ == "__main__":
         report()
     elif a == ["kakei"]:
         kakei()
+    elif a == ["youin"]:
+        youin()
+    elif a == ["shohi"]:
+        shohi()
     elif a == ["kakei", "teigaku"]:
         kakei(teigaku=True)
     elif a[:1] == ["table"] and len(a) >= 2:
