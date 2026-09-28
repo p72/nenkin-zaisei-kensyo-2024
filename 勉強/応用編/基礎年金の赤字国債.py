@@ -34,6 +34,16 @@ CASES = (("3003", "過去30年投影"), ("3002", "成長型経済移行・継続
 YEARS = (2027, 2030, 2040, 2050, 2060, 2080, 2100, 2120)
 
 
+def gdp(case):
+    """名目GDP（円、推定）。2024年度 642.4兆円を (1＋物価上昇率)(1＋実質経済成長率) で延ばす。"""
+    econ = {int(float(l.split(",")[0])) + 2000: [float(x) for x in l.split(",")]
+            for l in open(os.path.join(Z.SUURI, "emp", "data", "u-rev", "econ", f"econ-{case}.csv"))}
+    G = {2024: GDP_2024}
+    for y in range(2025, 2121):
+        G[y] = G[y - 1] * (1 + econ[y][6] / 100) * (1 + REAL[case] / 100)
+    return G
+
+
 def keisan(case):
     """年度ごとの国債発行額・残高・名目GDP（円・名目）。"""
     co, _, a = Z._mods()
@@ -47,10 +57,8 @@ def keisan(case):
         d = Z.delta(case)
     except (OSError, AttributeError):
         d = None                   # 901 を流していないケース（保険料の引き下げ幅は出さない）
-    G, GW = {2024: GDP_2024}, {2024: GDP_2024}
-    for y in range(2025, 2121):
-        G[y] = G[y - 1] * (1 + econ[y][6] / 100) * (1 + REAL[case] / 100)
-        GW[y] = GDP_2024 * W[y] / W[2024]
+    G = gdp(case)
+    GW = {y: GDP_2024 * W[y] / W[2024] for y in range(2024, 2121)}
     Dc = Z.discount(case)
     b0 = bg = br = pv = pvh = 0.0
     out = {}
