@@ -91,6 +91,14 @@
 #                 保険料月額は④の出力から ryuho_hokenryo.py が作る。
 #                 YOBI を変えて STEPS=45 で流す（ビルドは必要）。
 #   RYUHO_RITU 0〜1  厚年留保案で第3号が払う保険料の、国民年金保険料に対する割合（既定 1）
+#   ZEI     0/西暦4桁  基礎年金を税方式にする実施年度（思考実験）。⑤で、実施年度以降の
+#                 被用者年金4制度の基礎年金拠出金と基礎年金の国庫負担を外し、報酬比例の
+#                 調整経路は現行どおりのまま、2120年度の積立度合が現行制度と同じになる
+#                 厚生年金保険料率の引き下げ幅（保険料のうち基礎年金に当たる分）を求める
+#                 （sango-ryuho.patch の ZEI_KAISHI）。税方式の基礎年金の給付と財源は
+#                 ⑤の外で計算する（勉強/応用編/税方式7万円.py）。④は動かさない。
+#   ZEI_HIREI 0〜1  税方式のとき、実施年度以降の報酬比例を一律に何倍にするか（既定 1）
+#                 YOBI を変えて STEPS=45 で流す（ビルドは必要）。
 #
 #   SAIMU   0/1/2  債務の試算（原本の機能。既定 0）
 #                 0: 通常試算
@@ -217,6 +225,8 @@ KOKKO="${KOKKO:-0}"
 KOKKO_MODE="${KOKKO_MODE:-0}"
 RYUHO="${RYUHO:-0}"
 RYUHO_RITU="${RYUHO_RITU:-1}"
+ZEI="${ZEI:-0}"
+ZEI_HIREI="${ZEI_HIREI:-1}"
 SAIMU="${SAIMU:-0}"
 WAKU_M="${WAKU_M:-$WAKU}"
 YOBI2="${YOBI2:-001}"
@@ -246,7 +256,7 @@ chk ROUDR   "$ROUDR"   1 2 3
 chk SAIMU   "$SAIMU"   0 1 2
 chk SANGO_MODE "$SANGO_MODE" 0 1
 chk KOKKO_MODE "$KOKKO_MODE" 0 1
-for v in SANGO NIGO ICHIGO KOKKO RYUHO; do
+for v in SANGO NIGO ICHIGO KOKKO RYUHO ZEI; do
     eval "val=\$$v"
     case "$val" in
         0) ;;
@@ -271,6 +281,10 @@ fi
 if [ "$RYUHO" != 0 ] && { [ "$TOUGOU" != 0 ] || [ "$SAIMU" != 0 ] || [ "$KOKKO" != 0 ] \
         || [ "$SANGO" != 0 ] || [ "$NIGO" != 0 ] || [ "$ICHIGO" != 0 ]; }; then
     die "RYUHO は TOUGOU・SAIMU・KOKKO・SANGO・NIGO・ICHIGO と組み合わせられません"
+fi
+if [ "$ZEI" != 0 ] && { [ "$TOUGOU" != 0 ] || [ "$SAIMU" != 0 ] || [ "$KOKKO" != 0 ] || [ "$RYUHO" != 0 ] \
+        || [ "$SANGO" != 0 ] || [ "$NIGO" != 0 ] || [ "$ICHIGO" != 0 ]; }; then
+    die "ZEI はほかの独自レバーや TOUGOU・SAIMU と組み合わせられません"
 fi
 if [ "$KOKKO" != 0 ] && { [ "$TOUGOU" != 0 ] || [ "$SAIMU" != 0 ]; }; then
     die "KOKKO は TOUGOU・SAIMU と組み合わせられません（報酬比例の一律削減が統一カット率・債務試算の前提と合わない）"
@@ -354,12 +368,12 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
         cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/sango-haishi.patch"
     fi
 
-    if [ "$KOKKO" != 0 ] || [ "$RYUHO" != 0 ]; then
+    if [ "$KOKKO" != 0 ] || [ "$RYUHO" != 0 ] || [ "$ZEI" != 0 ]; then
         step "厚生年金への国庫負担の廃止レバーを⑤収支計算に当てる（patches/kokko-cut.patch）"
         cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/kokko-cut.patch"
     fi
-    if [ "$RYUHO" != 0 ]; then
-        step "厚年留保案のレバーを⑤収支計算に当てる（patches/sango-ryuho.patch）"
+    if [ "$RYUHO" != 0 ] || [ "$ZEI" != 0 ]; then
+        step "厚年留保案・税方式のレバーを⑤収支計算に当てる（patches/sango-ryuho.patch）"
         cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/sango-ryuho.patch"
     fi
 
@@ -566,9 +580,10 @@ if [ "$RYUHO" != 0 ]; then
 else
     unset RYUHO_FILE
 fi
+if [ "$ZEI" != 0 ]; then export ZEI_KAISHI="$ZEI" ZEI_HIREI; else unset ZEI_KAISHI ZEI_HIREI; fi
 emplog="$SUURI/emp/log/emp-$SHISAN-$SHISAN-$ECON-$WAKU-1120-$YOBI.log"
 cd "$SUURI/emp" && set +e
-emp_stdin | "$SUURI/emp/exec/asys20" | tee "$emplog" | grep -A 4 "最終代替率\|国庫負担の廃止\|厚年留保案\|均衡できません\|収束しません"
+emp_stdin | "$SUURI/emp/exec/asys20" | tee "$emplog" | grep -A 4 "最終代替率\|国庫負担の廃止\|厚年留保案\|税方式\|均衡できません\|収束しません"
 rc=${PIPESTATUS[1]}
 set -e
 if [ "$rc" != "0" ]; then
@@ -577,6 +592,9 @@ if [ "$rc" != "0" ]; then
     exit "$rc"
 fi
 # パッチの当たっていない⑤に環境変数だけ渡すと黙って通常試算になるので止める
+if [ "$ZEI" != 0 ] && ! grep -q "税方式：保険料率" "$emplog"; then
+    die "ZEI=$ZEI を指定しましたが⑤にレバーが効いていません（ビルドにパッチが当たっていない）。SKIP_BUILD を外してください"
+fi
 if [ "$RYUHO" != 0 ] && ! grep -q "厚年留保案：保険料率" "$emplog"; then
     die "RYUHO=$RYUHO を指定しましたが⑤にレバーが効いていません（ビルドにパッチが当たっていない）。SKIP_BUILD を外してください"
 fi
@@ -617,4 +635,7 @@ if [ "$KOKKO" != 0 ]; then
 fi
 if [ "$RYUHO" != 0 ]; then
     echo "  追加   厚年留保案 $RYUHO 年度・保険料の割合 $RYUHO_RITU（原本にないレバー）"
+fi
+if [ "$ZEI" != 0 ]; then
+    echo "  追加   基礎年金の税方式 $ZEI 年度・報酬比例の倍率 $ZEI_HIREI（原本にないレバー・思考実験）"
 fi
