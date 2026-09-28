@@ -97,7 +97,6 @@
 #                 厚生年金保険料率の引き下げ幅（保険料のうち基礎年金に当たる分）を求める
 #                 （sango-ryuho.patch の ZEI_KAISHI）。税方式の基礎年金の給付と財源は
 #                 ⑤の外で計算する（勉強/応用編/税方式7万円.py）。④は動かさない。
-#   ZEI_HIREI 0〜1  税方式のとき、実施年度以降の報酬比例を一律に何倍にするか（既定 1）
 #                 YOBI を変えて STEPS=45 で流す（ビルドは必要）。
 #
 #   SAIMU   0/1/2  債務の試算（原本の機能。既定 0）
@@ -226,7 +225,6 @@ KOKKO_MODE="${KOKKO_MODE:-0}"
 RYUHO="${RYUHO:-0}"
 RYUHO_RITU="${RYUHO_RITU:-1}"
 ZEI="${ZEI:-0}"
-ZEI_HIREI="${ZEI_HIREI:-1}"
 SAIMU="${SAIMU:-0}"
 WAKU_M="${WAKU_M:-$WAKU}"
 YOBI2="${YOBI2:-001}"
@@ -580,7 +578,7 @@ if [ "$RYUHO" != 0 ]; then
 else
     unset RYUHO_FILE
 fi
-if [ "$ZEI" != 0 ]; then export ZEI_KAISHI="$ZEI" ZEI_HIREI; else unset ZEI_KAISHI ZEI_HIREI; fi
+if [ "$ZEI" != 0 ]; then export ZEI_KAISHI="$ZEI"; else unset ZEI_KAISHI; fi
 emplog="$SUURI/emp/log/emp-$SHISAN-$SHISAN-$ECON-$WAKU-1120-$YOBI.log"
 cd "$SUURI/emp" && set +e
 emp_stdin | "$SUURI/emp/exec/asys20" | tee "$emplog" | grep -A 4 "最終代替率\|国庫負担の廃止\|厚年留保案\|税方式\|均衡できません\|収束しません"
@@ -637,5 +635,5 @@ if [ "$RYUHO" != 0 ]; then
     echo "  追加   厚年留保案 $RYUHO 年度・保険料の割合 $RYUHO_RITU（原本にないレバー）"
 fi
 if [ "$ZEI" != 0 ]; then
-    echo "  追加   基礎年金の税方式 $ZEI 年度・報酬比例の倍率 $ZEI_HIREI（原本にないレバー・思考実験）"
+    echo "  追加   基礎年金の税方式 $ZEI 年度（原本にないレバー・思考実験）"
 fi

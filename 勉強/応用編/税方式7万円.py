@@ -15,12 +15,6 @@
   python3 勉強/応用編/税方式7万円.py report              # 財源・所得税の上乗せ率・所得代替率
   python3 勉強/応用編/税方式7万円.py kakei               # 家計の負担の変化
   python3 勉強/応用編/税方式7万円.py table 3003 3001     # 財政見通し対照表（勉強/応用編/図/）
-
-総給付を現行制度と同じにする版（報酬比例を一律に削り、浮いた分を一般会計へ繰り入れる）
-  予備番号 902 報酬比例を0.5倍（削った分の大きさを測る）、903 総給付の現在価値が現行と同じになる倍率
-  ZEI=2027 ZEI_HIREI=0.5 YOBI=902 STEPS=45 検証/実行/run_pipeline.sh 3003 1 1 0 2
-  python3 勉強/応用編/税方式7万円.py kinko             # 倍率 m、所得税の上乗せ率、所得代替率、家計
-  （m を出したら ZEI_HIREI=m YOBI=903 で流し直してから、もう一度 kinko）
 """
 import importlib.util
 import os
@@ -293,64 +287,6 @@ table.t td.lab {{ font-size: 12px; }} table.s td.lab {{ text-align: left; }}</st
 </div></div></body></html>"""
 
 
-# ---------------------------------------------------------------------------
-# 総給付を現行制度と同じにする版
-# ---------------------------------------------------------------------------
-def discount(case):
-    """経済前提の名目運用利回りで2024年度末に割り引く係数。"""
-    rows = {int(float(l.split(",")[0])) + 2000: [float(x) for x in l.split(",")]
-            for l in open(os.path.join(SUURI, "emp", "data", "u-rev", "econ", f"econ-{case}.csv"))}
-    D, d = {2024: 1.0}, 1.0
-    for y in range(2025, 2121):
-        r = rows.get(y, rows[max(rows)])
-        d /= (1 + r[1] / 100) * (1 + r[6] / 100)
-        D[y] = d
-    return D
-
-
-def delta_of(case, yobi):
-    p = os.path.join(SUURI, "emp", "log", f"emp-{case}-{case}-{case}-{case}-1120-{yobi}.log")
-    return float(re.search(r"税方式：保険料率を\d+年度から ([0-9.]+)",
-                           open(p, encoding="utf-8", errors="replace").read()).group(1))
-
-
-def kinko():
-    """報酬比例を一律 m 倍に削って、総給付（基礎年金＋報酬比例など）の2027〜2120年度の現在価値を
-    現行制度と同じにする。厚生年金保険料率は901と同じ（基礎年金に当たる分だけ下げる）に据え置き、
-    報酬比例を削って浮いた分（903で追加で下げられる保険料率 × 標準報酬総額）を一般会計へ繰り入れる。"""
-    co, _, a = _mods()
-    for case, cname in CASES:
-        v = f"{case}-{case}-{case}-{case}"
-        kb = a.read_blocks(os.path.join(SUURI, "bas", "rslt", f"kekka{v}-1120-000a.csv"))
-        kiso0 = {int(r[0]): r[1] for r in kb["基礎年金給付費（新法＋旧法）"][1]}
-        z, d = zaigen(case)
-        D, R = discount(case), range(START, 2121)
-        e0, e2 = co.read_emp(v, "000", SH), co.read_emp(v, "902", SH)
-        up = sum((z[y]["cost"] - kiso0[y]) * D[y] for y in R) / 1e12
-        red = sum((e0[y]["独自給付"] - e2[y]["独自給付"]) * D[y] for y in R)     # 0.5倍にしたときの減
-        m = 1 - 0.5 * up / red
-        print(f"## {cname}：基礎年金の増（現在価値）{up:.1f}兆円 → 報酬比例を一律 {m:.6f} 倍（{(1 - m) * 100:.1f}%減）")
-        try:
-            d3 = delta_of(case, "903")
-        except (FileNotFoundError, AttributeError):
-            print("  予備番号903がまだ無い。ZEI_HIREI=%.6f YOBI=903 で流すこと" % m)
-            continue
-        e3, r0, r3 = co.read_emp(v, "903", SH), co.read_rate(v, "000", SH), co.read_rate(v, "903", SH)
-        red3 = sum((e0[y]["独自給付"] - e3[y]["独自給付"]) * D[y] for y in R)
-        print(f"  確認：報酬比例などの減（現在価値）{red3:.1f}兆円＝基礎年金の増 {up:.1f}兆円")
-        print(f"  一般会計への繰入れ：標準報酬総額の {(d3 - d) * 100:.2f}%（厚生年金保険料率は {18.3 - d * 100:.2f}% のまま）")
-        for y in (2027, 2120):
-            print(f"  所得代替率 {y}年度：現行 {r0[y]['所得代替率'] * 100:.1f}% → {r3[y]['代替率(比例)'] * 100 + z['kiso']:.1f}%"
-                  f"（比例 {r3[y]['代替率(比例)'] * 100:.1f}・基礎 {z['kiso']:.1f}）")
-        print("  | 年度 | 追加の税（901） | 繰入れ | 追加の税 | 所得税の上乗せ率 |")
-        print("  |---|---|---|---|---|")
-        for y in YEARS:
-            tr = (d3 - d) * e0[y]["標準報酬総額"] * 1e12
-            print(f"  | {y} | {z[y]['extra'] / 1e12:.1f}兆円 | {tr / 1e12:.1f}兆円 | {(z[y]['extra'] - tr) / 1e12:.1f}兆円 | "
-                  f"{z[y]['ritu'] * 100:.0f}% → **{(z[y]['extra'] - tr) / z[y]['shotoku'] * 100:.0f}%** |")
-        print()
-
-
 if __name__ == "__main__":
     a = sys.argv[1:]
     if a[:1] == ["run"] and len(a) >= 2:
@@ -359,8 +295,6 @@ if __name__ == "__main__":
         report()
     elif a == ["kakei"]:
         kakei()
-    elif a == ["kinko"]:
-        kinko()
     elif a[:1] == ["table"] and len(a) >= 2:
         table(a[1:])
     else:
