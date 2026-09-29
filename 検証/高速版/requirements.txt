@@ -1,0 +1,7 @@
+# 高速版（kosoku）の依存
+numpy>=1.26
+pyyaml>=6.0
+pytest>=7
+
+# 任意。無ければ kernels/jit.py が恒等デコレータに落ちて、正しいが遅い
+# numba>=0.59

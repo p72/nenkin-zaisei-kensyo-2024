@@ -1,0 +1,877 @@
+# 現行制度（2024年財政検証）の種
+# ==================================
+# 値ごとに移植版の行を `source: dir/file.py:LINE` で引く。`tests/test_policy_seed.py` が
+#   - `port:`  があれば、その属性（`system.module.NAME[idx]`）の値と一致すること
+#   - なければ `match:`（省略時は値の文字列）が `source:` の行に書かれていること
+# を全項目で確かめる。移植版は読み取り専用。
+#
+# 単位の約束: 金額は円（2004年度価格と書いたものはその価格）、率は小数、年度は西暦。
+# 移植版が「西暦−2000」で持つものは西暦に直して書き、`match:` に移植版の表記を残す。
+#
+# 原本の癖（`検証/原本の不具合.md` の J1・J2・J3・B11）は**原本どおり**を既定にする（2026-09-29 の利用者の
+# 決定。公表値の再現を既定にし、引用されたときに「厚労省の計算と違う」と読まれないように）。
+# 意図どおりに直した値は overlay `options/fix_bugs.yaml`（`load_policy("fix_bugs")`）で重ねる。
+
+meta:
+  name: {value: "2024年財政検証・現行制度", source: "kosoku/policy/base_2024.yaml:1", note: "この yaml 自身"}
+  first_year: {value: 2000, source: "emp_shushi/setconst.py:20", match: "ECSTY = 0"}
+  last_year: {value: 2125, source: "nat/setconst.py:110", port: "nat.setconst.SAISHUNENDO"}
+  base_year: {value: 2024, source: "nat/cntl.py:115", match: "2024"}
+
+# ---------------------------------------------------------------- ③ 国民年金
+kokunen:
+  part:                    # 適用拡大（③ argv[10] Part）: 目標納付率の上乗せと学生免除の据え置き
+    year: {value: 2027, source: "検証/実行/run_pipeline.sh:342", note: "適用拡大の実施年度（③ argv[11] Part_Year。run_pipeline.sh が 2027 を渡す）"}
+    mokuhyo_add:
+      "1": {value: 0.003, source: "nat/noufuritu.py:346", match: "0.003"}
+      "2": {value: 0.006, source: "nat/noufuritu.py:348", match: "0.006"}
+      "3": {value: 0.011, source: "nat/noufuritu.py:350", match: "0.011"}
+      "4": {value: 0.032, source: "nat/noufuritu.py:352", match: "0.032"}
+      "5": {value: 0.002, source: "nat/noufuritu.py:354", match: "0.002"}
+    gakusei_skip_mode: {value: 4, source: "nat/noufuritu.py:811", match: "G.Part != 4", note: "この区分のときだけ実施年度から 2 年間、学生の免除割合を前年度のまま"}
+  years:
+    suikei_shonendo: {value: 2021, source: "nat/setconst.py:100", port: "nat.setconst.SUIKEISHONENDO"}
+    econ_shonendo: {value: 2001, source: "nat/setconst.py:101", port: "nat.setconst.ECON_SHONENDO"}
+    lifetable: {value: 2020, source: "nat/setconst.py:104", port: "nat.setconst.LIFETABLE_NENDO"}
+    rorei_keinen: {value: [2015, 2030], source: "nat/setconst.py:105", match: "2015"}
+    izoku_keinen: {value: [2020, 2070], source: "nat/setconst.py:107", match: "2020"}
+    shikkenritu_keinen: {value: [2019, 2070], source: "nat/setconst.py:114", match: "2019"}
+    nendo_jisseki: {value: 2022, source: "nat/setconst.py:117", port: "nat.setconst.NENDO_JISSEKI"}
+    n_o_nendo: {value: 1926, source: "nat/setconst.py:119", port: "nat.setconst.N_O_NENDO"}
+    henkou_seinendo: {value: 1941, source: "nat/setconst.py:120", port: "nat.setconst.HenkouSeinendo"}
+    tinsura_kaishi: {value: 2021, source: "nat/setconst.py:121", port: "nat.setconst.TINSURA_KAISHI"}
+    tanshuku_nendo: {value: 2017, source: "nat/setconst.py:122", port: "nat.setconst.TANSHUKU_NENDO"}
+    tokutei_nendo: {value: 2009, source: "nat/setconst.py:125", port: "nat.setconst.TOKUTEI_NENDO"}
+    tokutei_tuki: {value: 4, source: "nat/setconst.py:126", port: "nat.setconst.TOKUTEI_TUKI"}
+    wakamono_henko_nendo: {value: 2016, source: "nat/setconst.py:128", port: "nat.setconst.WAKAMONO_HENKO_NENDO"}
+    wakamono_henko_ritu: {value: 0.75, source: "nat/setconst.py:129", port: "nat.setconst.WAKAMONO_HENKO_RITU"}
+    ikukyu_henko_nendo: {value: 2026, source: "nat/setconst.py:131", port: "nat.setconst.IKUKYU_HENKO_NENDO"}
+    ikukyu_henko_ritu: {value: 0.5, source: "nat/setconst.py:132", port: "nat.setconst.IKUKYU_HENKO_RITU"}
+    kugiri_nendo: {value: 2024, source: "nat/cntl.py:115", match: "2024"}
+  ages:
+    hiho_min: {value: 20, source: "nat/setconst.py:153", port: "nat.setconst.MIN_HIHO_NENREI"}
+    hiho_max: {value: 70, source: "nat/setconst.py:152", port: "nat.setconst.MAX_HIHO_NENREI"}
+    kyoshutu_max: {value: 60, source: "nat/setconst.py:154", port: "nat.setconst.MAX_KYOSHUTU_NENREI"}
+    op_kyoshutu_max: {value: 65, source: "nat/setconst.py:224", port: "nat.setconst.OP_MAX_KYOSHUTU_NENREI"}
+    rorei: {value: [60, 115], source: "nat/setconst.py:162", match: "60"}
+    kuriage_kubun: {value: 11, source: "nat/setconst.py:164", port: "nat.setconst.KURI_AGE_SAGE_SHIKYU_KUBUN"}
+    shogai: {value: [20, 115], source: "nat/setconst.py:167", match: "20"}
+    izoku_tuma: {value: [16, 115], source: "nat/setconst.py:170", match: "16"}
+    izoku_otto: {value: [18, 115], source: "nat/setconst.py:173", match: "18"}
+    izoku_ko: {value: [0, 19], source: "nat/setconst.py:176", match: "0"}
+    kafu: {value: [26, 64], source: "nat/setconst.py:179", match: "26"}
+    under_67: {value: 67, source: "nat/setconst.py:182", port: "nat.setconst.UNDER_67"}
+    sankyu: {value: [15, 49], source: "nat/setconst.py:187", match: "15"}
+  amounts_2004:            # 2004年度価格（円）。年度別の額は改定率を掛けて作る
+    mangaku: {value: 780900, source: "nat/seid.py:151", match: "780900."}
+    fuka: {value: 2400, source: "nat/seid.py:161", match: "2400."}
+    kakyu_12shi: {value: 224700, source: "nat/seid.py:163", match: "224700."}
+    kakyu_3shiiko: {value: 74900, source: "nat/seid.py:165", match: "74900."}
+    shibou_ichijikin: {value: [120000, 145000, 170000, 220000, 270000, 320000],
+                       source: "nat/seid.py:167", match: "120000."}
+    shibou_ichijikin_45: {value: 370000, source: "nat/seid.py:176", match: "370000."}
+    shibou_fuka: {value: 8500, source: "nat/seid.py:178", match: "8500."}
+  hokenryou_wariai:        # 免除区分ごとの「納めた割合」
+    menjo_3_4: {value: 0.25, source: "nat/seid.py:182", match: "0.25"}
+    menjo_1_2: {value: 0.5, source: "nat/seid.py:183", match: "0.5"}
+    menjo_1_4: {value: 0.75, source: "nat/seid.py:184", match: "0.75"}
+  shogai_bairitu:
+    kyu1: {value: 1.25, source: "nat/seid.py:187", match: "1.25"}
+    kyu2: {value: 1.0, source: "nat/seid.py:188", match: "1.00"}
+  kokko_wariai:            # 国庫負担割合（2009年3月まで 1/3、4月から 1/2）
+    before: {value: 0.3333333333333333, source: "nat/seid.py:191", match: "1. / 3."}
+    after: {value: 0.5, source: "nat/seid.py:192", match: "1. / 2."}
+  kanou_nensu:             # 加入可能年数（生年度）。1926→25 … 1941→40、1942以降 40
+    by: cohort
+    points:
+      1926: {value: 25, source: "nat/seid.py:138", match: "25 +"}
+      1942: {value: 40, source: "nat/seid.py:140", match: "40"}
+  kakudai_ichibu:          # 65歳一部繰上げ拡大の対象コホート（生年度）
+    cohorts: {value: [1957, 1961], source: "nat/siml.py:781", match: "SUIKEISHONENDO - 64"}
+  waribiki_years: {value: [2022, 2031], source: "nat/kiso.py:1229", match: "SUIKEISHONENDO + 1"}
+  quirks:                  # 原本の癖を再現するか（true = 原本どおり。options/fix_bugs.yaml が false にする）
+    b11_izoku_lifetable_sex: {value: true, source: "nat/siml.py:1044", match: "_c_at(G.q, yq, nenrei, seibetu)",
+                              note: "B11: 遺族の 60〜64歳の枝で、男は女の生命表、女は男の生命表の 1 歳上を読む"}
+    j3_waribiki_ninzu_2023: {value: true, source: "nat/shke.py:449", match: "jukyu_nenrei - 66, 1]",
+                             note: "J3: 繰下げの移行措置で 2032 年度以降の人数の係数に 2023 年度の値（0.2 など）を使う"}
+  kyufu2_cohort: {value: 1962, source: "nat/kiso.py:1303", match: "1962"}
+  kisai_shitasasae: {value: 0.80, source: "nat/cntl.py:117", match: "0.80"}
+  econ:                    # 改定率の作り方（nat/econ.py）
+    cal_start: {value: 2004, source: "nat/econ.py:203", port: "nat.econ._CAL_START"}
+    marume_nendo: {value: 2024, source: "nat/econ.py:204", port: "nat.econ._MARUME_NENDO"}
+    hikiage: {value: [2003, 2017], source: "nat/econ.py:259", match: "2003"}
+    hokenryo: {value: [0.1358, 0.13934, 0.14288, 0.14642, 0.14996, 0.1535, 0.15704, 0.16058,
+                       0.16412, 0.16766, 0.1712, 0.17474, 0.17828, 0.18182, 0.183],
+               source: "nat/econ.py:261", port: "nat.econ._HOKENRYO"}
+    kashobun_start: {value: 0.910, source: "nat/econ.py:264", port: "nat.econ._KASYOBUN_START"}
+    macro_jisseki:         # 単年度改定率に掛けた実績のマクロ経済スライド
+      2015: {value: 0.991, source: "nat/econ.py:427", match: "0.991"}
+      2019: {value: 0.995, source: "nat/econ.py:431", match: "0.995"}
+      2020: {value: 0.999, source: "nat/econ.py:435", match: "0.999"}
+  rounding:
+    mangaku: {value: {unit: 100, mode: nearest}, source: "nat/econ.py:222", match: "100"}
+    kaiteiritu: {value: {unit: 0.001, mode: nearest}, source: "nat/econ.py:230", match: "3"}
+
+# ---------------------------------------------------------------- ④ 基礎年金
+kiso:
+  years:
+    t_nendo: {value: 2120, source: "kiso_nenkin/cntl.py:136", match: "2120"}
+    t_doai: {value: 1, source: "kiso_nenkin/cntl.py:137", match: "1"}
+    d_m_nendo: {value: 2025, source: "kiso_nenkin/cntl.py:144", match: "2025"}
+    kaishi1: {value: 2023, source: "kiso_nenkin/cntl.py:146", match: "2023"}
+    c_nendo: {value: 2004, source: "kiso_nenkin/cntl.py:148", match: "2004"}
+    marume_nendo: {value: 2025, source: "kiso_nenkin/cntl.py:150", match: "2025"}
+    kakaku_nendo: {value: 2004, source: "kiso_nenkin/setconst.py:63", port: "kiso_nenkin.setconst.KAKAKU_NENDO"}
+    tumatumi_nendo: {value: 2015, source: "kiso_nenkin/setconst.py:68", port: "kiso_nenkin.setconst.TUMATUMI_NENDO"}
+    tumatumi_kikan: {value: 10, source: "kiso_nenkin/setconst.py:69", port: "kiso_nenkin.setconst.TUMATUMI_KIKAN"}
+    kokko_hikiage: {value: 2009, source: "kiso_nenkin/dtst.py:68", port: "kiso_nenkin.dtst.HIKIAGE_NENDO"}
+    fukushi_nendo: {value: 2024, source: "kiso_nenkin/dtst.py:101", match: "2024"}
+    first_year: {value: 2021, source: "kiso_nenkin/setconst.py:60", match: "SHONENDO = 2020", note: "推計初年度 = SHONENDO + 1"}
+    kugiri_stop: {value: 2024, source: "kiso_nenkin/tyousei.py:133", match: "2024", note: "これより前では終了年度を止めない（実績で決まる）"}
+    r_s_c_nendo: {value: 2120, source: "kiso_nenkin/setconst.py:67", port: "kiso_nenkin.setconst.R_S_C_NENDO"}
+  ages:
+    max_jukyu: {value: 115, source: "kiso_nenkin/setconst.py:136", port: "kiso_nenkin.setconst.MAX_JUKYU"}
+    under_63: {value: 63, source: "kiso_nenkin/setconst.py:142", port: "kiso_nenkin.setconst.UNDER_63"}
+    under_64: {value: 64, source: "kiso_nenkin/setconst.py:143", port: "kiso_nenkin.setconst.UNDER_64"}
+    under_67: {value: 67, source: "kiso_nenkin/setconst.py:144", port: "kiso_nenkin.setconst.UNDER_67"}
+  kokko:                   # 国庫負担割合
+    before: {value: 0.35833333333333334, source: "kiso_nenkin/dtst.py:114", match: "1.0 / 3.0 + 25.0 / 1000.0"}
+    after: {value: 0.5, source: "kiso_nenkin/dtst.py:123", match: "1.0 / 2.0"}
+  tokubetu_kokko:          # 特別国庫負担の割合
+    menjo: {value: 1.0, source: "kiso_nenkin/dtst.py:115", match: "1.0"}
+    kasaage: {value: 0.25, source: "kiso_nenkin/dtst.py:116", match: "1.0 / 4.0"}
+    kasamenjo: {value: 1.0, source: "kiso_nenkin/dtst.py:117", match: "1.0"}
+    shitasasae: {value: 1.0, source: "kiso_nenkin/dtst.py:118", match: "1.0"}
+    gonen: {value: 0.125, source: "kiso_nenkin/dtst.py:119", match: "1.0 / 8.0"}
+    hatachimae_before: {value: 0.38, source: "kiso_nenkin/dtst.py:120", match: "38.0 / 100.0"}
+    hatachimae_after: {value: 0.2, source: "kiso_nenkin/dtst.py:124", match: "2.0 / 10.0"}
+  macro:                   # マクロ経済スライドの実績（pre_cut と持ち越し T）
+    actuals:
+      2022: {value: {pre_cut: 1.0, T_div: 0.997}, source: "kiso_nenkin/econ.py:143", match: "0.997"}
+      2023: {value: {pre_cut_div: 0.994, T: 1.0}, source: "kiso_nenkin/econ.py:145", match: "0.994"}
+      2024: {value: {pre_cut_div: 0.996, T: 1.0}, source: "kiso_nenkin/econ.py:148", match: "0.996"}
+    base_up_avg_fixed:     # 3年平均を実績値に差し替える年度
+      value: {2018: 0.992}
+      source: "kiso_nenkin/econ.py:285"
+      match: "0.992"
+    bisection_iters: {value: 128, source: "kiso_nenkin/tyousei.py:153", match: "128"}
+  tumitate_oku:            # 国民年金の年度末積立金の実績（億円）
+    value: {2020: 116365.0, 2021: 121176.0, 2022: 124290.0}
+    source: "kiso_nenkin/dtst.py:89"
+    port: "kiso_nenkin.dtst._TUMITATE_OKU"
+  tumatumi_2014: {value: 1552833257900.0, source: "kiso_nenkin/dtst.py:97", match: "1552833257900.0"}
+  tumatumi_bunpai:         # 妻積の各制度への分配額（実績。円）
+    value: {2015: 159094034794.0, 2016: 159113373167.0, 2017: 155730757637.0, 2018: 155722505415.0,
+            2019: 155706999522.0, 2020: 155691472107.0, 2021: 155664967139.0, 2022: 155622975560.0,
+            2023: 155499428227.0, 2024: 155334733769.0}
+    source: "kiso_nenkin/dtst.py:71"
+    port: "kiso_nenkin.dtst._TUMATUMI_BUNPAI"
+  fukushi:                 # 業務勘定への繰入（2020〜2022 決算、2023〜2024 予算。円）
+    value: {2020: 64122425512.0, 2021: 61434162241.0, 2022: 55579456448.0, 2023: 54100000000.0,
+            2024: 53900000000.0}
+    source: "kiso_nenkin/dtst.py:85"
+    match: "64122425512.0"
+  rounding:
+    hokenryou_unit: {value: 10, source: "kiso_nenkin/read_file.py:199", match: "Round(G.Hokenryou_m[sn][1], 1)", note: "10円単位（2025年度まで）"}
+  model:
+    pension_2024: {value: 133960, source: "kiso_nenkin/dtst.py:147", match: "133960"}
+    wage_2024: {value: 369915, source: "kiso_nenkin/dtst.py:148", match: "369915"}
+
+# ---------------------------------------------------------------- ② 厚生年金 給付費
+kounen:
+  years:
+    stty: {value: 2015, source: "emp_kyufu/setconst.py:51", match: "STTY = 15"}
+    kijun: {value: 2021, source: "emp_kyufu/setconst.py:60", match: "KIJUN = 21"}
+    ecedy: {value: 2128, source: "emp_kyufu/setconst.py:55", match: "ECEDY = 128"}
+    part_yr1: {value: 2016, source: "emp_kyufu/cntl.py:134", match: "16"}
+    part_yr2: {value: 2022, source: "emp_kyufu/cntl.py:135", match: "22"}
+    part_yr3: {value: 2024, source: "emp_kyufu/cntl.py:136", match: "24"}
+    part_yr_option: {value: 2027, source: "emp_kyufu/cntl.py:139", match: "27"}
+    canyr: {value: 2031, source: "emp_kyufu/cntl.py:149", match: "31"}
+    kozaxyr: {value: 2027, source: "emp_kyufu/cntl.py:160", match: "27"}
+    houjouyr: {value: 2027, source: "emp_kyufu/cntl.py:175", match: "27"}
+    hsr_endy: {value: 2040, source: "emp_kyufu/cntl.py:197", match: "40"}
+  ages:
+    xb: {value: 115, source: "emp_kyufu/cntl.py:206", match: "115"}
+    xa: {value: 64, source: "emp_kyufu/cntl.py:207", match: "64"}
+    kozax: {value: 65, source: "emp_kyufu/cntl.py:164", match: "65"}
+  rates:
+    hsr_r: {value: 0.013, source: "emp_kyufu/cntl.py:198", match: "1.3e-2"}
+    hikrate: {value: 0.95, source: "emp_kyufu/cntl.py:209", match: "0.95"}
+    pre_1946: {value: 0.0075, source: "emp_kyufu/seid.py:127", match: "7.5e-3"}
+    pres_1946: {value: 0.005481, source: "emp_kyufu/seid.py:136", match: "5.481e-3"}
+    srv: {value: 0.75, source: "emp_kyufu/seid.py:268", match: "0.75"}
+    senll: {value: 44, source: "emp_kyufu/seid.py:243", match: "44.0"}
+    ha: {value: [1.25, 1.00, 1.00], source: "emp_kyufu/seid.py:248", match: "1.25"}
+    hb: {value: [1.25, 1.00, 0.75], source: "emp_kyufu/seid.py:251", match: "1.25"}
+    ema: {value: [1.284, 1.031], source: "emp_kyufu/seid.py:255", match: "1.284"}
+    emb: {value: [1.266, 1.048], source: "emp_kyufu/seid.py:258", match: "1.266"}
+    emc: {value: [1.165, 1.000], source: "emp_kyufu/seid.py:263", match: "1.165"}
+    dtem: {value: [0.995182, 1.006545], source: "emp_kyufu/seid.py:390", match: "0.995182"}
+  amounts_2004:            # 2004年度価格（円、年額）
+    fl1: {value: 804200, source: "emp_kyufu/seid.py:153", match: "8042.0e+2"}
+    minb: {value: 603200, source: "emp_kyufu/seid.py:154", match: "6032.0e+2"}
+    fl_tanka_tsuki: {value: 1676, source: "emp_kyufu/seid.py:158", match: "1676.0"}
+    adt: {value: [231400, 231400, 77100], source: "emp_kyufu/seid.py:164", match: "2314.0e+2"}
+    wif: {value: 603200, source: "emp_kyufu/seid.py:201", match: "6032.0e+2"}
+  tables:                  # 生年別テーブル（1926〜1945年度生。添字0が1926）
+    tmp: {value: [1000, 986, 972, 958, 944, 931, 917, 904, 891, 879, 866, 854, 841, 829, 818, 806, 794, 783, 772, 761],
+          source: "emp_kyufu/seid.py:61", port: "emp_kyufu.seid._TMP"}
+    tmp2: {value: [7692, 7585, 7477, 7369, 7262, 7162, 7054, 6954, 6854, 6762, 6662, 6569, 6469, 6377, 6292, 6200, 6108, 6023, 5938, 5854],
+           source: "emp_kyufu/seid.py:68", port: "emp_kyufu.seid._TMP2"}
+    # 原本どおり（J1: 1936年度生は 369）。意図どおりの並び（1369）は options/fix_bugs.yaml
+    tmq: {value: [1875, 1817, 1761, 1707, 1654, 1603, 1553, 1505, 1458, 1413, 369, 1327, 1286, 1246, 1208, 1170, 1134, 1099, 1065, 1032],
+          source: "emp_kyufu/seid.py:78", port: "emp_kyufu.seid._TMQ",
+          note: "J1: 添字10（1936年度生）が 369（原本の写し間違い。公表は 1.369）。2022 年度以降の出力には現れない"}
+    tmr: {value: [1000, 973, 947, 920, 893, 867, 840, 813, 787, 760, 733, 707, 680, 653, 627, 600, 573, 547, 520, 493, 467, 440, 413, 387, 360, 333, 307, 280, 253, 227, 200, 173, 147, 120, 93, 67, 67, 67, 67, 67],
+          source: "emp_kyufu/seid.py:93", port: "emp_kyufu.seid._TMR"}
+  tokubetu_kasan:          # 配偶者加給の特別加算（生年度 → 円、2004年度価格）
+    by: cohort
+    points:
+      1926: {value: 0, source: "emp_kyufu/seid.py:174", match: "0.0e+0"}
+      1934: {value: 34100, source: "emp_kyufu/seid.py:176", match: "341.0e+2"}
+      1940: {value: 68300, source: "emp_kyufu/seid.py:178", match: "683.0e+2"}
+      1941: {value: 102500, source: "emp_kyufu/seid.py:180", match: "1025.0e+2"}
+      1942: {value: 136600, source: "emp_kyufu/seid.py:182", match: "1366.0e+2"}
+      1943: {value: 170700, source: "emp_kyufu/seid.py:184", match: "1707.0e+2"}
+  shikyu_kaishi:           # 支給開始年齢（生年度 → 歳）。sknr.py の if 連鎖を表にしたもの
+    teigaku_male:
+      by: cohort
+      points:
+        1926: {value: 60, source: "emp_kyufu/sknr.py:64", match: "60"}
+        1941: {value: 61, source: "emp_kyufu/sknr.py:68", match: "61"}
+        1943: {value: 62, source: "emp_kyufu/sknr.py:70", match: "62"}
+        1945: {value: 63, source: "emp_kyufu/sknr.py:72", match: "63"}
+        1947: {value: 64, source: "emp_kyufu/sknr.py:74", match: "64"}
+        1949: {value: 65, source: "emp_kyufu/sknr.py:76", match: "65"}
+    teigaku_female:
+      by: cohort
+      points:
+        1926: {value: 59, source: "emp_kyufu/sknr.py:79", match: "59"}
+        1940: {value: 60, source: "emp_kyufu/sknr.py:64", match: "60"}
+        1946: {value: 61, source: "emp_kyufu/sknr.py:81", match: "61"}
+        1948: {value: 62, source: "emp_kyufu/sknr.py:83", match: "62"}
+        1950: {value: 63, source: "emp_kyufu/sknr.py:85", match: "63"}
+        1952: {value: 64, source: "emp_kyufu/sknr.py:87", match: "64"}
+        1954: {value: 65, source: "emp_kyufu/sknr.py:89", match: "65"}
+    hirei_male:
+      by: cohort
+      points:
+        1926: {value: 60, source: "emp_kyufu/sknr.py:114", match: "60"}
+        1953: {value: 61, source: "emp_kyufu/sknr.py:118", match: "61"}
+        1955: {value: 62, source: "emp_kyufu/sknr.py:120", match: "62"}
+        1957: {value: 63, source: "emp_kyufu/sknr.py:122", match: "63"}
+        1959: {value: 64, source: "emp_kyufu/sknr.py:124", match: "64"}
+        1961: {value: 65, source: "emp_kyufu/sknr.py:126", match: "65"}
+    hirei_female:
+      by: cohort
+      points:
+        1926: {value: 59, source: "emp_kyufu/sknr.py:129", match: "59"}
+        1940: {value: 60, source: "emp_kyufu/sknr.py:114", match: "60"}
+        1958: {value: 61, source: "emp_kyufu/sknr.py:131", match: "61"}
+        1960: {value: 62, source: "emp_kyufu/sknr.py:133", match: "62"}
+        1962: {value: 63, source: "emp_kyufu/sknr.py:135", match: "63"}
+        1964: {value: 64, source: "emp_kyufu/sknr.py:137", match: "64"}
+        1966: {value: 65, source: "emp_kyufu/sknr.py:139", match: "65"}
+  kflcan:                  # 基礎年金45年化の加入可能年数（cntl.py:set_kflcan）
+    default: {value: 40, source: "emp_kyufu/cntl.py:226", match: "40.0"}
+    by_year:               # 年度側の上限 kmax（canyr = 2031 起点）
+      by: year
+      points:
+        2031: {value: 41, source: "emp_kyufu/cntl.py:238", match: "41.0"}
+        2034: {value: 42, source: "emp_kyufu/cntl.py:240", match: "42.0"}
+        2037: {value: 43, source: "emp_kyufu/cntl.py:242", match: "43.0"}
+        2040: {value: 44, source: "emp_kyufu/cntl.py:244", match: "44.0"}
+        2043: {value: 45, source: "emp_kyufu/cntl.py:246", match: "45.0"}
+    by_cohort:             # 生年側（canyr − 60 = 1971 起点）
+      by: cohort
+      points:
+        1971: {value: 41, source: "emp_kyufu/cntl.py:249", match: "41.0"}
+        1973: {value: 42, source: "emp_kyufu/cntl.py:251", match: "42.0"}
+        1975: {value: 43, source: "emp_kyufu/cntl.py:253", match: "43.0"}
+        1977: {value: 44, source: "emp_kyufu/cntl.py:255", match: "44.0"}
+        1979: {value: 45, source: "emp_kyufu/cntl.py:257", match: "45.0"}
+  sigo:                    # 基礎年金の拠出期間 45 年化（レバー）: 加入可能年数の階段（港 cntl.py:set_kflcan）
+    base_years: {value: 40, source: "emp_kyufu/cntl.py:226", match: "40.0", note: "45年化でない年度・生年度の加入可能年数"}
+    year_steps:            # 年度の上限: canyr からの経過年 → 年数（canyr = kounen.years.canyr）
+      "0": {value: 41, source: "emp_kyufu/cntl.py:238", match: "kmax = 41.0"}
+      "3": {value: 42, source: "emp_kyufu/cntl.py:240", match: "kmax = 42.0"}
+      "6": {value: 43, source: "emp_kyufu/cntl.py:242", match: "kmax = 43.0"}
+      "9": {value: 44, source: "emp_kyufu/cntl.py:244", match: "kmax = 44.0"}
+      "12": {value: 45, source: "emp_kyufu/cntl.py:246", match: "kmax = 45.0"}
+    cohort_steps:          # 生年度の上限: canyr − 60 からの差 → 年数（2 年度ごとに 1 年ずつ）
+      "0": {value: 41, source: "emp_kyufu/cntl.py:249", match: "min(41.0, kmax)"}
+      "2": {value: 42, source: "emp_kyufu/cntl.py:251", match: "min(42.0, kmax)"}
+      "4": {value: 43, source: "emp_kyufu/cntl.py:253", match: "min(43.0, kmax)"}
+      "6": {value: 44, source: "emp_kyufu/cntl.py:255", match: "min(44.0, kmax)"}
+      "8": {value: 45, source: "emp_kyufu/cntl.py:257", match: "min(45.0, kmax)"}
+    cohort_from_offset: {value: -60, source: "emp_kyufu/cntl.py:229", match: "canyr - 60", note: "canyr − 60 年度生から"}
+  houjou:                  # 標準報酬月額の上限引上げ（オプション）の倍率
+    r75: {value: [1.016, 1.005], source: "emp_kyufu/cntl.py:177", match: "1.016"}
+    r83: {value: [1.024, 1.008], source: "emp_kyufu/cntl.py:180", match: "1.024"}
+    r98: {value: [1.036, 1.011], source: "emp_kyufu/cntl.py:183", match: "1.036"}
+
+  flags:                   # cntl.py が固定している旗（通常試算）
+    chinsura: {value: 1, source: "emp_kyufu/cntl.py:203", match: "1"}
+    flg_kaisho: {value: 2, source: "emp_kyufu/cntl.py:212", match: "2"}
+    cht_flg: {value: 1, source: "emp_kyufu/cntl.py:208", match: "1"}
+    seiy: {value: 2070, source: "emp_kyufu/cntl.py:120", match: "70"}    # 生命表の最終年（港は 70）
+    hihonen: {value: 70, source: "emp_kyufu/simlbzw.py:109", match: "70"}
+  econ:                    # 改定率（econ.cpp）。実績の名目利回り・賃金は shushi.econ.jisseki と同じ表
+    marume_yr: {value: 2024, source: "emp_kyufu/econ.py:181", match: "24.0"}
+    hp_from_hh_year: {value: 2007, source: "emp_kyufu/econ.py:337", match: "7"}
+    tamari_init: {value: -0.017, source: "emp_kyufu/econ.py:212", match: "-1.7e-2"}
+    kashobun: {value: 0.910, source: "emp_kyufu/econ.py:642", match: "0.910"}
+    prema: {value: {base_year: 2003, base: 0.1358, step: 0.00354, cap: 0.183},
+            source: "emp_kyufu/econ.py:631", match: "13.58e-2"}
+    init_2004:             # 2004年度の水準
+      year: {value: 2004, source: "emp_kyufu/econ.py:215", match: "[4]"}
+      hh_juzen: {value: 0.986, source: "emp_kyufu/econ.py:215", match: "0.986"}
+      hh_hon0: {value: {67: 0.990, 68: 0.982, 69: 0.975, 70: 0.971, 71: 0.971, 72: 0.971},
+                source: "emp_kyufu/econ.py:153", match: "0.990"}
+      hon0_73: {value: [1.064, 1.069], source: "emp_kyufu/econ.py:154", match: "1.064"}
+      hon0_74: {value: [1.041, 1.069], source: "emp_kyufu/econ.py:155", match: "1.041"}
+      hon0_75: {value: [1.031, 1.069], source: "emp_kyufu/econ.py:156", match: "1.031"}
+      hh_toku: {value: 1.003, source: "emp_kyufu/econ.py:222", match: "1.003"}
+      hp_hon_unit: {value: 7809, source: "emp_kyufu/econ.py:226", match: "7809"}
+      hp_toku: {value: 0.988, source: "emp_kyufu/econ.py:227", match: "0.988"}
+      hp_toku_unit: {value: 8042, source: "emp_kyufu/econ.py:228", match: "8042"}
+      jz_shk: {value: [0.917, 0.990], source: "emp_kyufu/econ.py:247", match: "0.917"}
+      dir: {value: 0.980, source: "emp_kyufu/econ.py:248", match: "0.980"}
+    toku_fix: {value: {year: 2006, value: 0.9999}, source: "emp_kyufu/econ.py:389", match: "0.9999"}
+    tokurei_kaisho: {value: {years: [2013, 2014], rate: 0.99, done_from: 2015},
+                     source: "emp_kyufu/econ.py:361", match: "0.99"}
+    hh2: {value: [0.004, 0.007, 0.008], source: "emp_kyufu/econ.py:519", match: "0.4e-2"}
+    ad2_init: {value: 0.988, source: "emp_kyufu/econ.py:567", match: "0.988"}
+    ad2_extra:
+      2015: {value: 0.991, source: "emp_kyufu/econ.py:570", match: "0.991"}
+      2019: {value: 0.995, source: "emp_kyufu/econ.py:572", match: "0.995"}
+      2020: {value: 0.999, source: "emp_kyufu/econ.py:574", match: "0.999"}
+
+  kuriage:                 # 繰上げの 1か月あたり減額率（krgn.cpp）
+    gengaku_old: {value: 0.005, source: "emp_kyufu/krgn.py:145", match: "0.005"}    # 2022年3月以前の裁定
+    gengaku_new: {value: 0.004, source: "emp_kyufu/krgn.py:146", match: "0.004"}    # 2022年4月以降
+    new_rate:              # 0.4% の減額率が当たる裁定（2022年度以降の 1962 年度生以降）
+      year: {value: 2022, source: "emp_kyufu/shkejken.py:254", match: "k >= 22"}
+      cohort: {value: 1962, source: "emp_kyufu/shkejken.py:254", match: "x - 60"}
+  kanou_nensu:             # 加入可能年数 = min(生年度 − 1926 + 25, 40)（seid.cpp）
+    base_cohort: {value: 1926, source: "emp_kyufu/seid.py:36", match: "1926"}
+    base_years: {value: 25, source: "emp_kyufu/seid.py:220", match: "75 + 24"}
+    max_years: {value: 40, source: "emp_kyufu/seid.py:220", match: "40.0"}
+  kanou_nensu_tsuro:       # 通算老齢の加入可能年数（生年度 → 年）
+    by: cohort
+    points:
+      1926: {value: 35, source: "emp_kyufu/seid.py:227", match: "35.0"}
+      1929: {value: 36, source: "emp_kyufu/seid.py:229", match: "36.0"}
+      1934: {value: 37, source: "emp_kyufu/seid.py:231", match: "37.0"}
+      1944: {value: 38, source: "emp_kyufu/seid.py:233", match: "38.0"}
+      1945: {value: 39, source: "emp_kyufu/seid.py:235", match: "39.0"}
+      1946: {value: 40, source: "emp_kyufu/seid.py:237", match: "40.0"}
+  keikateki_kafu:          # 経過的寡婦加算 = 寡婦年金 − 定額単価 × (生年度 − 1926)/加入可能年数。1956年度生以降は 0
+    zero_from: {value: 1956, source: "emp_kyufu/seid.py:212", match: "-44"}
+  dattai_ritsu:            # 脱退一時金などの率 ee[1]（制度で違う）と ee[2]
+    kiso: {value: 0.25, source: "emp_kyufu/seid.py:273", match: "0.25"}
+    kou: {value: 0.20, source: "emp_kyufu/seid.py:275", match: "0.20"}
+    kyosai: {value: 0.1585, source: "emp_kyufu/seid.py:277", match: "0.1585"}
+    sig: {value: 0.1982, source: "emp_kyufu/seid.py:279", match: "0.1982"}
+  tables_first_cohort: {value: 1926, source: "emp_kyufu/seid.py:123", match: "-74"}   # tmp/tmp2/tmq/tmr の先頭の生年度
+  sik:                     # 支給率の将来への伸ばし方（seid.cpp）
+    xs_kou: {value: 81, source: "emp_kyufu/seid.py:394", match: "81"}         # 高齢の在職支給率を外挿する年齢
+    xe_kou: {value: 96, source: "emp_kyufu/seid.py:395", match: "96"}
+    xs_kyosai: {value: 80, source: "emp_kyufu/seid.py:397", match: "80"}
+    xe_kyosai: {value: 95, source: "emp_kyufu/seid.py:398", match: "95"}
+    okure_years: {value: 5, source: "emp_kyufu/seid.py:451", match: "KIJ + 5"}   # 裁定遅れの解消年数
+    fill_years:            # 支給開始年齢の段差を埋める年度（x 歳を 61／62 歳の値にする）
+      kou_from_61:
+        "62": {value: 2024, source: "emp_kyufu/seid.py:523", match: "24"}
+        "63": {value: 2027, source: "emp_kyufu/seid.py:525", match: "27"}
+        "64": {value: 2030, source: "emp_kyufu/seid.py:527", match: "30"}
+      from_62:
+        "63": {value: 2022, source: "emp_kyufu/seid.py:530", match: "22"}
+        "64": {value: 2025, source: "emp_kyufu/seid.py:532", match: "25"}
+    tsuro_gen:             # 在職（新通）の繰上げ減額（基準年度時点の年齢で線形）
+      young_female: {value: [0.90, 1.00], source: "emp_kyufu/seid.py:607", match: "0.90"}   # 23〜59歳
+      sixties_male: {value: [0.80, 0.70], source: "emp_kyufu/seid.py:618", match: "0.80"}   # 61〜69歳
+      sixties_female: {value: [0.95, 0.90], source: "emp_kyufu/seid.py:620", match: "0.95"}
+  part:
+    bbn_tsuki:             # パートの標準報酬月額 [男, 女]（円）。0 現行、1〜5 適用拡大の案
+      "0": {value: [169000, 151000], source: "emp_kyufu/seid.py:785", match: "16.9e4"}
+      "1": {value: [169000, 151000], source: "emp_kyufu/seid.py:791", match: "16.9e4"}
+      "2": {value: [139000, 111000], source: "emp_kyufu/seid.py:796", match: "13.9e4"}
+      "3": {value: [141000, 114000], source: "emp_kyufu/seid.py:801", match: "14.1e4"}
+      "4": {value: [97000, 88000], source: "emp_kyufu/seid.py:806", match: "9.7e4"}
+      "5": {value: [88000, 88000], source: "emp_kyufu/seid.py:811", match: "8.8e4"}
+  kiso:                    # 基礎率の伸ばし方（kiso.cpp）
+    qp_base_years: {value: [2019, 2020, 2021], source: "emp_kyufu/kiso.py:132", match: "qp[19, x, 1]"}
+    u_qp_base_kou: {value: 2021, source: "emp_kyufu/kiso.py:277", match: "qp[21, x, s3]",
+                    note: "E23: 厚年の死亡脱退力の分母だけ 1年ぶん（共済は 3年平均）"}
+    shogai65_years: {value: 40, source: "emp_kyufu/kiso.py:189", match: "40.0"}   # 65歳の障害失権率を寄せる年数
+    rds_end_year: {value: 2040, source: "emp_kyufu/kiso.py:264", match: "40"}     # 生存脱退力の縮小が終わる年度
+    rds:                   # 生存脱退力の縮小率（年齢 → 率）。flg_inout 0 が既定
+      inout0:
+        male: {value: {0: 0.00, 40: 0.20, 60: 0.40, 65: 0.00}, source: "emp_kyufu/kiso.py:230", match: "0.20"}
+        female: {value: {0: 0.00, 25: 0.35, 60: 0.55, 65: 0.00}, source: "emp_kyufu/kiso.py:239", match: "0.35"}
+      inout1:
+        male: {value: {0: 0.00, 60: 0.30, 65: 0.00}, source: "emp_kyufu/kiso.py:251", match: "0.30"}
+        female: {value: {0: 0.00, 25: 0.20, 60: 0.55, 65: 0.00}, source: "emp_kyufu/kiso.py:258", match: "0.20"}
+    kyosai_shift:          # 共済の脱退力を 64歳で減らし 65・66歳で足す（支給開始年齢の引上げ）
+      kok: {value: {1: 0.08676, 2: 0.16302}, source: "emp_kyufu/kiso.py:296", match: "0.08676"}
+      ren: {value: {1: 0.25681, 2: 0.23008}, source: "emp_kyufu/kiso.py:298", match: "0.25681"}
+      from_64: {value: 2023, source: "emp_kyufu/kiso.py:302", match: "23"}
+      at_65: {value: [2024, 2025], source: "emp_kyufu/kiso.py:304", match: "24"}
+      from_66: {value: 2027, source: "emp_kyufu/kiso.py:305", match: "27"}
+    rc_growth:             # 女の有子割合・加給対象者割合を 1959年度生以降で年度ごとに (n+1)/n 倍（n = 年度 − 2014）
+      cohort: {value: 1959, source: "emp_kyufu/kiso.py:447", match: "k - 14 == x - 55"}
+      base_year: {value: 2014, source: "emp_kyufu/kiso.py:449", match: "k - 13 - 0.5"}
+    furikae:               # 振替加算（新通 i = 6）の段階的な立ち上げ
+      kdc: {value: [0.0340341, 0.0237070], source: "emp_kyufu/kiso.py:503", match: "0.0340341"}
+      cohort_start: {value: 1952, source: "emp_kyufu/kiso.py:523", match: "x - 68"}
+      steps: {value: 5, source: "emp_kyufu/kiso.py:532", match: "kdc * 5"}
+
+  cohorts:                 # 生年度の境（②）
+    keika_last: {value: 1946, source: "emp_kyufu/dtst.py:211", match: "-54"}     # これ以前の生まれが経過措置（旧法の内訳 z[1]・配偶者加給）
+    kyuho_last: {value: 1925, source: "emp_kyufu/siml.py:220", match: "-75"}     # これ以前の生まれの裁定は旧法（i + 4）
+  dtst:                    # 足元の整理（dtst.cpp）
+    fmin_ratio: {value: 0.80, source: "emp_kyufu/dtst.py:372", match: "0.80"}    # 8割下限
+    fmin_all_years: {value: true, source: "emp_kyufu/dtst.py:434", match: "E25",
+                     note: "E25: 8割下限の従前額保障は生年に関係なく全年度を引き直す"}
+    juzen:                 # 従前額保障を足元へ引き直す係数
+      base:                # 生年度 → 2004年度までの改定の積
+        1930: {value: [1.019, 0.998, 1.024], source: "emp_kyufu/dtst.py:383", match: "1.019"}
+        1931: {value: [1.042, 0.996, 1.025], source: "emp_kyufu/dtst.py:388", match: "1.042"}
+        1932: {value: [1.080, 0.990], source: "emp_kyufu/dtst.py:393", match: "1.080"}
+      hh2_count:           # 生年度 → 1999〜2001 年度の特例（kounen.econ.hh2）を何年ぶん掛けるか
+        1926: {value: 0, source: "emp_kyufu/dtst.py:395", match: "1.031"}
+        1935: {value: 1, source: "emp_kyufu/dtst.py:399", match: "1.004"}
+        1936: {value: 2, source: "emp_kyufu/dtst.py:405", match: "1.007"}
+        1937: {value: 3, source: "emp_kyufu/dtst.py:412", match: "1.008"}
+      divisor: {value: 1.031, source: "emp_kyufu/dtst.py:386", match: "1.031"}
+      chain_from: {value: 2005, source: "emp_kyufu/dtst.py:425", match: "range(5"}   # ここから基準年度まで賃金／物価で引き直す
+      chain_age: {value: 67, source: "emp_kyufu/dtst.py:431", match: "kk - 67"}      # その年度に 67 歳以下の生年だけ
+    hosei:                 # 2021年度の実績に合わせる補正率（i 給付の種類、j 年金額の内訳）
+      kou:
+        j15: {value: 1.1711, source: "emp_kyufu/dtst.py:644", match: "1.1711"}
+        j16: {value: 0.9560, source: "emp_kyufu/dtst.py:645", match: "0.9560"}
+        j4: {value: 1.0021, source: "emp_kyufu/dtst.py:646", match: "1.0021"}
+        o4: {value: 1.1608, source: "emp_kyufu/dtst.py:647", match: "1.1608"}
+        i: {value: {1: 1.0005, 2: 1.0030, 3: 1.0051, 4: 1.0089, 5: 0.9807, 6: 0.9853, 7: 1.0006, 8: 1.0001, 9: 0.9997, 10: 1.0129, 11: 1.0001, 12: 1.0000, 13: 1.0003},
+            source: "emp_kyufu/dtst.py:674", match: "1.0005"}
+      kok:
+        j15: {value: 1.1199, source: "emp_kyufu/dtst.py:649", match: "1.1199"}
+        j16: {value: 0.1679, source: "emp_kyufu/dtst.py:650", match: "0.1679"}
+        j4: {value: 1.0000, source: "emp_kyufu/dtst.py:651", match: "1.0000"}
+        o4: {value: 1.0005, source: "emp_kyufu/dtst.py:652", match: "1.0005"}
+        i: {value: {1: 0.9910, 2: 1.0198, 3: 0.9735, 4: 1.0195, 9: 1.0095, 11: 0.9624},
+            source: "emp_kyufu/dtst.py:688", match: "0.9910"}
+      ren:
+        j15: {value: 1.1212, source: "emp_kyufu/dtst.py:654", match: "1.1212"}
+        j16: {value: 0.2987, source: "emp_kyufu/dtst.py:655", match: "0.2987"}
+        j4: {value: 1.0000, source: "emp_kyufu/dtst.py:656", match: "1.0000"}
+        o4: {value: 1.0003, source: "emp_kyufu/dtst.py:657", match: "1.0003"}
+        i: {value: {1: 1.0004, 2: 1.0384, 3: 0.9859, 4: 0.9808, 9: 1.0539, 11: 1.0407},
+            source: "emp_kyufu/dtst.py:695", match: "1.0004"}
+      sig:
+        j15: {value: 1.1199, source: "emp_kyufu/dtst.py:659", match: "1.1199"}
+        j16: {value: 0.2366, source: "emp_kyufu/dtst.py:660", match: "0.2366"}
+        j4: {value: 1.0000, source: "emp_kyufu/dtst.py:661", match: "1.0000"}
+        o4: {value: 1.0001, source: "emp_kyufu/dtst.py:662", match: "1.0001"}
+        i: {value: {1: 1.0011, 2: 0.9920, 3: 0.9743, 4: 0.9767, 9: 1.0557, 11: 0.8044},
+            source: "emp_kyufu/dtst.py:702", match: "1.0011"}
+
+  siml:                    # 年度ステップの定数（siml.cpp と simlbzw / dsitk / simlsaite / simlrhnf）
+    jz_base: {value: [1.031, 0.988], source: "emp_kyufu/simlbzw.py:344", match: "1.031 * 0.988"}   # 従前額保障の再評価の起点
+    cht_from: {value: 2005, source: "emp_kyufu/simlbzw.py:345", match: "range(5"}
+    cht_extra:             # 再評価率に掛ける決め打ちの補正（生年度 1938 以降は 0.998 も）
+      cohort: {value: 1938, source: "emp_kyufu/simlbzw.py:114", match: "-62"}
+      factor: {value: 0.998, source: "emp_kyufu/simlbzw.py:115", match: "0.998"}
+      all: {value: [0.991, 0.995, 0.999], source: "emp_kyufu/simlbzw.py:117", match: "0.991 * 0.995 * 0.999"}
+    izoku65:               # 遺族厚生年金の 65 歳の割り増し（配偶者 65 歳以上の給付割合と経過的寡婦加算）
+      srv_male: {value: 1.0357, source: "emp_kyufu/simlsaite1.py:148", match: "1.0357"}
+      srv_female: {value: 1.2019, source: "emp_kyufu/simlsaite1.py:150", match: "1.2019"}
+      f_male: {value: 1.0628, source: "emp_kyufu/simlrhnf.py:269", match: "1.0628"}
+      fhik_male: {value: 1.0608, source: "emp_kyufu/simlrhnf.py:272", match: "1.0608"}
+      f_female: {value: 2.5057, source: "emp_kyufu/simlrhnf.py:282", match: "2.5057"}
+      fhik_female: {value: 2.9759, source: "emp_kyufu/simlrhnf.py:285", match: "2.9759"}
+    riv2:                  # 68 歳以上の再評価のずれ（生年度 1938 以降は 0.998 の補正が入っている）
+      cohort: {value: 1938, source: "emp_kyufu/simlsaite1.py:288", match: "-62"}
+      factor: {value: 0.998, source: "emp_kyufu/simlsaite1.py:291", match: "0.998"}
+    kyu_shogai_ratio: {value: 1.25, source: "emp_kyufu/simlsaite1.py:561", match: "25.0 / 20.0"}   # 旧法障害（3級）の乗率の比
+    tai_bunkatsu:          # 退職裁定を支給開始年齢の引上げ中の生年で年数割りする
+      cohort_from: {value: 1952, source: "emp_kyufu/simlsaite2.py:547", match: "KIJUN - 69"}
+      cohort_to_male: {value: 1958, source: "emp_kyufu/simlsaite2.py:547", match: "KIJUN - 63"}
+      cohort_to_female: {value: 1959, source: "emp_kyufu/simlsaite2.py:549", match: "KIJUN - 62"}
+      age_base: {value: 76, source: "emp_kyufu/simlsaite2.py:551", match: "k - x + 54"}   # 割る数 = max(1, 76 − x)
+    dsitk:                 # 裁定時の資格（it）と旧法の支給開始年齢
+      kikan_25: {value: {1926: 20, 1952: 21, 1953: 22, 1954: 23, 1955: 24, 1956: 25},
+                 source: "emp_kyufu/dsitk.py:220", match: "20.0"}          # 新法の期間要件（生年度で 20→25 年）
+      kikan_chukorei: {value: {1926: 15, 1947: 16, 1948: 17, 1949: 18, 1950: 19, 1951: 999},
+                       source: "emp_kyufu/dsitk.py:215", match: "15.0"}    # 旧法の中高齢の特例（1951 年度生以降は無し）
+      it3_cohort_from: {value: 1952, source: "emp_kyufu/dsitk.py:212", match: "-48"}
+      it3_years: {value: 20, source: "emp_kyufu/dsitk.py:212", match: "20.0"}
+      xr_kyuho: {value: {1926: 55, 1946: 56, 1948: 57, 1950: 58, 1952: 59, 1954: 60},
+                 source: "emp_kyufu/dsitk.py:249", match: "55"}            # 旧法中高齢の支給開始年齢
+    hantei:                # 足元の実績に合わせる判定補正（厚年の男女）
+      rcoe: {value: {male: [0.36, 0.64], female: [0.60, 0.40]}, source: "emp_kyufu/siml.py:388", match: "0.36"}
+      rtemp_adj: {value: {male: [-0.06, 0.13], female: [-0.06, 0.03]}, source: "emp_kyufu/siml.py:406", match: "0.06"}
+      fcoe_j1: {value: {male: [0.11, 0.89], female: [0.46, 0.54]}, source: "emp_kyufu/siml.py:461", match: "0.11"}
+      fcoe_j14: {value: {male: [0.15, 0.85], female: [0.50, 0.50]}, source: "emp_kyufu/siml.py:470", match: "0.15"}
+      ftemp_adj_j1: {value: {male: [-0.00, 0.03], female: [-0.01, 0.01]}, source: "emp_kyufu/siml.py:499", match: "0.00"}
+      ftemp_adj_j14: {value: {male: [-0.01, 0.01], female: [-0.02, 0.01]}, source: "emp_kyufu/siml.py:508", match: "0.01"}
+      zero_age_male: {value: 65, source: "emp_kyufu/siml.py:430", match: "65"}
+      zero_age_female: {value: 63, source: "emp_kyufu/siml.py:430", match: "63"}
+
+    kurisage_zogaku: {value: 0.007, source: "emp_kyufu/shkejken.py:293", match: "0.007"}   # 繰下げ 1 か月あたりの増額率
+    shke:                  # 集計（shkejken / shkejuk）
+      e26_stale_xxr_age: {value: 114, source: "emp_kyufu/shkejken.py:50", match: "114",
+                          note: "E26: i ≥ 5 の加給の判定に使う支給開始年齢は直前の呼び出し（i = 4, x = 114）の値"}
+      hantei_cohorts:      # 判定補正の対象になる生年度（足元の 65〜70 歳と、その 1〜2 年あと）
+        from: {value: 1952, source: "emp_kyufu/shkejken.py:113", match: "KIJUN + 1 - 70"}
+        to: {value: 1957, source: "emp_kyufu/shkejken.py:113", match: "KIJUN + 1 - 65"}
+        extra_male: {value: [1958], source: "emp_kyufu/shkejken.py:114", match: "KIJUN + 2 - 65"}
+        extra_female: {value: [1958, 1959], source: "emp_kyufu/shkejken.py:116", match: "KIJUN + 3 - 65"}
+      furikae_spouse_cohort_from: {value: 1926, source: "emp_kyufu/shkejken.py:380", match: "-74"}   # 配偶者の生年度がこれ以降なら振替加算
+      ab_factor:           # 配偶者ありの割合 ab に掛ける係数。地共済は原本どおり 461.6518（J2。0〜1 の比に掛けるので 3 桁ずれと読める）
+        kou: {value: 0.9301, source: "emp_kyufu/shkejuk.py:136", match: "0.9301"}
+        kok: {value: 0.8745, source: "emp_kyufu/shkejuk.py:138", match: "0.8745"}
+        ren: {value: 461.6518, source: "emp_kyufu/shkejuk.py:141", match: "461.6518",
+              note: "J2: 原本どおり。桁を直した推定値 0.4616518 は options/fix_bugs.yaml"}
+        sig: {value: 0.7979, source: "emp_kyufu/shkejuk.py:143", match: "0.7979"}
+  jikoutou:                # 事故等の補正率（shkejsha.cpp）。厚年は加算（2023〜2026 年度で線形に消す）、共済は倍率
+    kou: {value: {1: 0.0009, 5: 0.0015, 7: 0.0269, 9: 0.0001, 10: 0.0049, 11: 0.0000, 12: 0.0009, 13: 0.0028},
+          source: "emp_kyufu/shkejsha.py:159", match: "0.0009"}     # 2〜4 は 1、6 は 5、8 は 7 と同じ
+    kok: {value: {5: 1.1296, 6: 1.0000, 7: 1.0311, 8: 1.0000, 10: 0.9977, 12: 0.9488, 13: 1.3214},
+          source: "emp_kyufu/shkejsha.py:174", match: "1.1296"}
+    ren: {value: {5: 1.0517, 6: 1.0000, 7: 1.0022, 8: 1.0000, 10: 1.0118, 12: 1.0155, 13: 1.5290},
+          source: "emp_kyufu/shkejsha.py:182", match: "1.0517"}
+    sig: {value: {5: 1.0298, 6: 1.0000, 7: 1.0001, 8: 1.0000, 10: 0.9866, 12: 0.9887, 13: 1.5069},
+          source: "emp_kyufu/shkejsha.py:190", match: "1.0298"}
+    fade:
+      full_until: {value: 2022, source: "emp_kyufu/shkejsha.py:111", match: "22"}
+      zero_from: {value: 2027, source: "emp_kyufu/shkejsha.py:113", match: "22 + 4"}
+
+# ---------------------------------------------------------------- ⑤ 厚生年金 収支
+shushi:
+  years:
+    stty: {value: 2009, source: "emp_shushi/setconst.py:14", match: "STTY = 9"}
+    kijun: {value: 2022, source: "emp_shushi/cntl.py:201", match: "22"}
+    kmakuro_yr: {value: 2018, source: "emp_shushi/cntl.py:176", match: "18"}
+    kmakuro_yr2: {value: 2025, source: "emp_shushi/cntl.py:179", match: "25"}
+    kyoskijun: {value: 2015, source: "emp_shushi/cntl.py:228", match: "15"}
+    part_yr1: {value: 2022, source: "emp_shushi/cntl.py:107", match: "22"}
+    part_yr2: {value: 2024, source: "emp_shushi/cntl.py:108", match: "24"}
+    k_jisseki: {value: 2024, source: "emp_shushi/shus_calc.py:208", match: "24"}    # これより前では調整を止めない
+    kend: {value: 2120, source: "emp_shushi/main.py:92", match: "20"}                 # 均衡終了年度（Cutrfile3 + 2100）
+    dmakuro_yr: {value: 2025, source: "emp_shushi/cntl.py:193", match: "25"}         # 名目下限撤廃の開始年度
+    houjou_yr: {value: 2027, source: "emp_shushi/cntl.py:138", match: "27"}          # 標準報酬上限の見直しの施行年度（半年分）
+    part_yr3_option: {value: 2027, source: "emp_shushi/cntl.py:110", match: "27"}    # 適用拡大（オプション）の年度（PARTHOU の 2 行目）
+    slide_first: {value: 2005, source: "emp_shushi/shus_calc.py:218", match: "5"}   # 調整率を持つ最初の年度
+  hokenryoritu:            # 保険料率のスケジュール。率[y] = min(cap, base + step × (y − base_year))
+    # 港の Prema の並び: 1 厚年, 2 国共済, 3 地共済, 4 私学, 5 第3種（坑内員・船員）。港の docstring は
+    # 4 を旧農林・5 を私学と書くが、使われ方（Cc[4] = An[4] × Premb[4]、An[1][3] × (Premb[5] − Premb[1])）
+    # から 4 が私学、5 が第3種の上乗せ分（stages/s5_emp_shushi/premium.py）
+    kou: {value: {base_year: 2003, base: 0.1358, step: 0.00354, cap: 0.183},
+          source: "emp_shushi/shus.py:111", match: "0.1358"}
+    kofu: {value: {base_year: 2003, base: 0.1496, step: 0.00248, cap: 0.183},
+           source: "emp_shushi/shus.py:112", match: "0.1496"}
+    kok: {value: {base_year: 2009, base: 0.15154, step: 0.00354, cap: 0.183},
+          source: "emp_shushi/shus.py:121", match: "0.15154"}
+    ren: {value: {base_year: 2009, base: 0.15154, step: 0.00354, cap: 0.183},
+          source: "emp_shushi/shus.py:128", match: "0.183"}
+    sig: {value: {base_year: 2009, base: 0.1223, step: 0.00354, cap: 0.183},
+          source: "emp_shushi/shus.py:122", match: "0.1223"}
+  tumitate_2022:           # 2022年度末積立金（円）
+    kou: {value: 208822700000000, source: "emp_shushi/shus.py:274", match: "2088227.0E+8"}
+    kok: {value: 8476300000000, source: "emp_shushi/shus.py:275", match: "84763.0E+8"}
+    ren: {value: 25051300000000, source: "emp_shushi/shus.py:276", match: "250513.0E+8"}
+    sig: {value: 3127500000000, source: "emp_shushi/shus.py:277", match: "31275.0E+8"}
+  kokunen_tumitate_ikan:   # 調整期間一致のとき厚年に足す国年積立金（円）
+    2021: {value: 12117600000000, source: "emp_shushi/shus.py:319", match: "121176.0E+8"}
+    2022: {value: 12429000000000, source: "emp_shushi/shus.py:322", match: "124290.0E+8"}
+  etoc: {value: [13, 14, 15, 6, 7, 8, 16, 5, 16, 5, 16, 5, 16, 5],
+         source: "emp_shushi/shus_calc.py:48", port: "emp_shushi.shus_calc.etoc"}
+  balance:
+    ca: {value: 1.0, source: "emp_shushi/cntl.py:214", match: "1.0"}
+    secant_iters: {value: 14, source: "emp_shushi/shus_calc.py:35", match: "14"}
+    max_iters: {value: 62, source: "emp_shushi/shus_calc.py:36", match: "62"}
+    tol: {value: 0.5e-13, source: "emp_shushi/shus_calc.py:350", match: "0.5E-13"}
+    # ---- 均衡の解法（kosoku/balance.py。既定 current = 移植版と同じ。フェーズ H）----
+    rule: {value: current, source: "kosoku/balance.py:RULES",
+           note: "current / premium（給付固定・料率均衡）/ payg（賦課方式）/ perpetual（永久均衡・給付水準）/ perpetual_premium"}
+    premium_from: {value: 2027, source: "kosoku/balance.py:rule_of", note: "料率を動かす最初の年度（premium / payg）"}
+    payg_fund: {value: real_constant, source: "kosoku/balance.py:solve_payg", note: "賦課方式で積立金を物価で実質一定に保つ"}
+    growth: {value: wage, source: "kosoku/balance.py:margin_stationary", note: "永久均衡の g = 終期の名目賃金上昇率"}
+  model:                   # モデル世帯（所得代替率の分子・分母）
+    mdlk: {value: 2024, source: "emp_shushi/shus_calc.py:414", match: "24"}
+    kasho: {value: 0.813, source: "emp_shushi/shus_calc.py:415", match: "0.813"}
+    mihanei: {value: 0.985, source: "emp_shushi/shus_calc.py:416", match: "0.985"}
+    w_2024: {value: [455000, 443000, 580000, 174000, 305000], source: "emp_shushi/shus_calc.py:418", match: "455000."}
+    kiso_2024: {value: 136000, source: "emp_shushi/shus_calc.py:424", match: "136000."}
+    hirei_joritu: {value: 0.005481, source: "emp_shushi/shus_calc.py:429", match: "5.481E-3"}
+    hirei_hosei: {value: 0.926, source: "emp_shushi/shus_calc.py:429", match: "0.926"}
+    kashobun: {value: 0.91, source: "emp_shushi/shus_calc.py:441", match: "0.91"}
+    kaitei_2023: {value: 0.994, source: "emp_shushi/shus_calc.py:424", match: "0.994"}
+    kaitei_2024: {value: 0.996, source: "emp_shushi/shus_calc.py:424", match: "0.996"}
+  premb_weights:           # 保険料率の年度内平均（前年度:当年度の月数）
+    kou: {value: [6, 6], source: "emp_shushi/shus.py:134", match: "6.0"}
+    kofu: {value: [6, 6], source: "emp_shushi/shus.py:134", match: "6.0"}
+    kok: {value: [5, 7], source: "emp_shushi/shus.py:136", match: "5.0"}
+    ren: {value: [5, 7], source: "emp_shushi/shus.py:136", match: "7.0"}
+    sig: {value: [1, 11], source: "emp_shushi/shus.py:138", match: "11.0"}
+  shunor: {value: 0.997, source: "emp_shushi/cntl.py:207", match: "0.997"}       # 厚年の収納率
+  nendohosei: {value: 1.0, source: "emp_shushi/cntl.py:211", match: "1.000"}    # 独自給付の年度補正
+  part:
+    cbm_pt1: {value: 10.0, source: "emp_shushi/cntl.py:114", match: "12. * 5. / 6."}   # 適用拡大の年度の月数
+  houjou:                  # 標準報酬月額の上限引上げの倍率 [男・第3種, 女]（②の kounen.houjou と同じ値）
+    r75: {value: [1.016, 1.005], source: "emp_shushi/cntl.py:140", match: "1.016"}
+    r83: {value: [1.024, 1.008], source: "emp_shushi/cntl.py:143", match: "1.024"}
+    r98: {value: [1.036, 1.011], source: "emp_shushi/cntl.py:146", match: "1.036"}
+  jimu:                    # 事務費（円）の実績。2025年度以降は 2024年度を被保険者数と物価で延ばす
+    kou:
+      2021: {value: 178794000000, source: "emp_shushi/shus.py:286", match: "1787.94E+8"}
+      2022: {value: 169849000000, source: "emp_shushi/shus.py:288", match: "1698.49E+8"}
+      2023: {value: 200000000000, source: "emp_shushi/shus.py:290", match: "2000.00E+8"}
+      2024: {value: 230000000000, source: "emp_shushi/shus.py:292", match: "2300.00E+8"}
+    kok:
+      2021: {value: 4895000000, source: "emp_shushi/shus.py:295", match: "48.95E+8"}
+      2022: {value: 5256000000, source: "emp_shushi/shus.py:297", match: "52.56E+8"}
+    ren:
+      2021: {value: 7359000000, source: "emp_shushi/shus.py:300", match: "73.59E+8"}
+      2022: {value: 7530000000, source: "emp_shushi/shus.py:302", match: "75.30E+8"}
+    sig:
+      2021: {value: 2693000000, source: "emp_shushi/shus.py:305", match: "26.93E+8"}
+      2022: {value: 2949000000, source: "emp_shushi/shus.py:307", match: "29.49E+8"}
+    extend_from: {value: 2025, source: "emp_shushi/shus.py:311", match: "25"}
+    extend_base: {value: 2024, source: "emp_shushi/shus.py:313", match: "24"}
+  econ:                    # ⑤の経済前提（econ.c）
+    kakaku: {value: 2024, source: "emp_shushi/econ.py:36", match: "24"}           # 価格基準年度
+    id_hhd_start: {value: 2006, source: "emp_shushi/econ.py:115", match: "6"}
+    marume_until: {value: 2025, source: "emp_shushi/econ.py:116", match: "KAKAKU + 1"}   # 改定率を小数3桁に丸める最終年度
+    kaite_ci_until: {value: 2007, source: "emp_shushi/econ.py:121", match: "7"}          # 物価だけで改定した最終年度
+    kaite_hp_override:
+      2018: {value: -0.009, source: "emp_shushi/econ.py:124", match: "-0.009"}
+    jisseki:               # 名目運用利回り・名目賃金上昇率の実績（%）。物価は econ ファイルのまま
+      2001: {value: [1.99, 0.38], source: "emp_shushi/econ.py:42", match: "1.99"}
+      2002: {value: [0.21, -0.66], source: "emp_shushi/econ.py:43", match: "0.21"}
+      2003: {value: [4.91, -0.61], source: "emp_shushi/econ.py:44", match: "4.91"}
+      2004: {value: [2.73, -0.18], source: "emp_shushi/econ.py:45", match: "2.73"}
+      2005: {value: [6.82, -0.24], source: "emp_shushi/econ.py:46", match: "6.82"}
+      2006: {value: [3.10, -0.25], source: "emp_shushi/econ.py:47", match: "3.10"}
+      2007: {value: [-3.54, -0.46], source: "emp_shushi/econ.py:48", match: "-3.54"}
+      2008: {value: [-6.83, -0.49], source: "emp_shushi/econ.py:49", match: "-6.83"}
+      2009: {value: [7.54, -3.03], source: "emp_shushi/econ.py:50", match: "7.54"}
+      2010: {value: [-0.26, -0.44], source: "emp_shushi/econ.py:51", match: "-0.26"}
+      2011: {value: [2.17, -0.08], source: "emp_shushi/econ.py:52", match: "2.17"}
+      2012: {value: [9.57, -0.32], source: "emp_shushi/econ.py:53", match: "9.57"}
+      2013: {value: [8.22, -0.14], source: "emp_shushi/econ.py:54", match: "8.22"}
+      2014: {value: [11.61, 1.06], source: "emp_shushi/econ.py:55", match: "11.61"}
+      2015: {value: [-3.14, 0.33], source: "emp_shushi/econ.py:56", match: "-3.14"}
+      2016: {value: [5.30, -0.05], source: "emp_shushi/econ.py:57", match: "5.30"}
+      2017: {value: [6.50, 0.26], source: "emp_shushi/econ.py:58", match: "6.50"}
+      2018: {value: [1.42, 0.79], source: "emp_shushi/econ.py:59", match: "1.42"}
+      2019: {value: [-4.96, 0.60], source: "emp_shushi/econ.py:60", match: "-4.96"}
+      2020: {value: [23.90, -0.52], source: "emp_shushi/econ.py:61", match: "23.90"}
+      2021: {value: [5.19, 1.04], source: "emp_shushi/econ.py:62", match: "5.19"}
+      2022: {value: [1.44, 1.39], source: "emp_shushi/econ.py:63", match: "1.44"}
+  slide_actuals:           # 毎年の調整率 rh の実績（shus_calc8）
+    2014: {value: {year: 2014, numer: 0.978, denom: 0.9761, digits: 3, max_age: 76},
+           source: "emp_shushi/shus_calc.py:237", match: "0.978"}   # 特例水準の解消分（76歳以下）
+    2023: {value: 0.994, source: "emp_shushi/shus_calc.py:255", match: "0.994"}
+    2024: {value: 0.996, source: "emp_shushi/shus_calc.py:257", match: "0.996"}
+    tokutyo_reset: {value: [2023, 2024], source: "emp_shushi/shus_calc.py:244", match: "23"}
+
+# ---------------------------------------------------------------- ① 被保険者
+hihokensha:                # ①被保険者推計。年度は西暦そのもの（港 setconst.py）
+  years:
+    starty: {value: 2020, source: "hihokensha/setconst.py:45", port: "hihokensha.setconst.STARTY"}
+    endy: {value: 2150, source: "hihokensha/setconst.py:46", port: "hihokensha.setconst.ENDY"}
+    kijun: {value: 2022, source: "hihokensha/setconst.py:47", port: "hihokensha.setconst.KIJUN"}
+    kijunmap: {value: 2023, source: "hihokensha/setconst.py:48", port: "hihokensha.setconst.KIJUNMAP"}
+    ks: {value: 2021, source: "hihokensha/setconst.py:49", port: "hihokensha.setconst.KS"}
+    kf: {value: 2125, source: "hihokensha/setconst.py:50", port: "hihokensha.setconst.KF"}
+    cnendo: {value: 2005, source: "hihokensha/setconst.py:51", port: "hihokensha.setconst.CNENDO"}
+    cut_jy: {value: 2024, source: "hihokensha/setconst.py:52", port: "hihokensha.setconst.CUT_JY"}
+    sjinkoy: {value: 2020, source: "hihokensha/cntl.py:136", match: "2020", note: "人口推計の開始年度（STARTY と同じでなければ港は止まる）"}
+    fjinkoy: {value: 2120, source: "hihokensha/cntl.py:137", match: "2120", note: "人口推計の終了年度。共済はここから先を総人口の割合の伸びで延ばす"}
+    yuhaigy: {value: 2070, source: "hihokensha/cntl.py:158", match: "2070", note: "有配偶率の推計が続く最終年度"}
+    roudyr: {value: 2040, source: "hihokensha/cntl.py:173", match: "2040", note: "労働力率の推計が続く最終年度"}
+    mika_soto_zero: {value: 2040, source: "hihokensha/simlichisan.py:175", match: "2040", note: "未加入外の率をここへ向けて 0 に寄せる（港は直値）"}
+    part_start: {value: 2024, source: "hihokensha/simlpart.py:162", match: "2024", note: "適用拡大（パート）の推計が始まる年度（港は直値。CUT_JY と同じ値）"}
+    xend_file_last: {value: 2050, source: "hihokensha/readdata.py:214", match: "2051", note: "1・3号上限年齢のファイルの最終年度（それ以降は据え置き）。range(STARTY, 2051)"}
+  ages:
+    roudou: {value: [15, 105], source: "hihokensha/simlroud.py:72", match: "15, 106", note: "労働力の年齢の範囲"}
+    kounen: {value: [15, 100], source: "hihokensha/simlkou.py:79", match: "15, 101", note: "厚年・共済・1号3号の年齢の範囲"}
+    map: {value: [15, 89], source: "hihokensha/readdata.py:316", match: "range(15, 90)", note: "被保険者数の実績（map）の年齢"}
+    ichiyuhaigr: {value: [20, 69], source: "hihokensha/readdata.py:205", match: "range(20, 70)", note: "1号有配偶率の年齢"}
+    yuhaigr: {value: [15, 105], source: "hihokensha/readdata.py:152", match: "range(15, 106)", note: "女性有配偶割合のファイルの年齢"}
+    kyos_fold: {value: 69, source: "hihokensha/simlkyos.py:153", match: "69", note: "共済の 70 歳以上を寄せる年齢"}
+    kounen_cap_from: {value: 70, source: "hihokensha/simlkou.py:195", match: "range(70", note: "厚年の 70 歳以上に上限を掛ける"}
+    nigou_max: {value: 69, source: "hihokensha/simlkou.py:334", match: "nenrei <= 69", note: "2号（厚年）に数える最高齢"}
+    tan_adjust_from: {value: 60, source: "hihokensha/simlroud.py:133", match: "nenrei >= 60", note: "非正規短時間の補正で男・女無配偶を動かす年齢"}
+    xend_default: {value: 60, source: "hihokensha/readdata.py:222", match: "60", note: "1・3号の上限年齢（45年化でないとき）"}
+    mika_min: {value: 22, source: "hihokensha/simlichisan.py:172", match: "20 + 1", note: "未加入外の率を送るときこの年齢未満は 0（nenrei <= 20 + 1 → 0）"}
+    ichisan_from: {value: 20, source: "hihokensha/simlichisan.py:203", match: "range(20", note: "1号・3号の推計の下限年齢"}
+    fout: {value: [15, 120], source: "hihokensha/fout.py:103", match: "15, 121", note: "出力の年齢の範囲"}
+    fout_fold: {value: 100, source: "hihokensha/fout.py:104", match: "100", note: "101 歳以上を寄せる列"}
+    kokunen_nigou_max: {value: 64, source: "hihokensha/fout.py:147", match: "A0:65", note: "分類 2（国年2号）は 65 歳未満"}
+    cutritu_sum: {value: [15, 110], source: "hihokensha/cutout.py:124", match: "range(15, 111)", note: "調整率の被保険者数を積む年齢"}
+  kounen:
+    cap_70: {value: 0.98, source: "hihokensha/simlkou.py:197", match: "0.98", note: "70 歳以上の厚年被保険者は前年度の 1 歳下の 0.98 倍を超えない（§2.5）"}
+    rk_sen_young_max: {value: 29, source: "hihokensha/simlkou.py:250", match: "nenrei <= 29", note: "旧厚3種の割合: この年齢以下は実績 4 年度の平均"}
+    rk_sen_old_min: {value: 85, source: "hihokensha/simlkou.py:255", match: "nenrei >= 85", note: "旧厚3種の割合: この年齢以上は 0（間はコホートで送る）"}
+  part:
+    partkyr: {value: 2023, source: "hihokensha/cntl.py:121", match: "2023", note: "パートの基礎数値を取る年度"}
+    mode_ge1: {value: {part: 2, partyr1: 2027, partyr2: 2029}, source: "hihokensha/cntl.py:126", match: "PART = 2", note: "MODE 1〜5 はどれも 2 段階（2027・2029 年度。cntl.py:127-128）。区分の違いは入力ファイルの側"}
+    kubun: {value: {n: 15, step: 5, offset: 12}, source: "hihokensha/simlpart.py:110", match: "kubun * 5 + 12", note: "5 歳きざみの年齢区分 kubun=1..15 の中心年齢 = kubun*5+12（±2 歳）"}
+    hours: {value: {"1": 100.0, "2": 120.0, "3": 60.0}, source: "hihokensha/simlpart.py:631", match: "p2 * 120.0 + p1 * 100.0 + p3 * 60.0", note: "時間区分ごとの月の労働時間（1 週20〜30時間 / 2 週30時間以上 / 3 週20時間未満）"}
+    tkubun_names: {value: {"1": "週20～30時間", "2": "週30時間以上", "3": "週20時間未満"}, source: "hihokensha/fout.py:230", match: "週30時間以上", note: "fout の見出し（30〜32 列）の順 = (0,2) (0,1) (0,3)"}
+    pkubun_names: {value: {"0": "計", "1": "元1号", "2": "元3号", "3": "元3号（旧厚）", "4": "元3号（国共済）", "5": "元3号（地共済）", "6": "元3号（私学）", "7": "元その他"}, source: "hihokensha/simlpart.py:11", match: "pkubun", note: "元制度の区分"}
+  ichisan:
+    mode45_hosei: {value: {"45": 0.003, "50": 0.011, "55": 0.063}, source: "hihokensha/simlichisan.py:282", match: "0.003", note: "45年化のとき 45〜59 歳の3号に (XEND−60)/5 × 係数 を掛ける（5 歳ごと。0.011 は :285、0.063 は :288）"}
+  cutritu:
+    jyumyo: {value: 0.997, source: "hihokensha/cutout.py:114", match: "0.997", note: "平均余命の伸びのぶん（固定）"}
+    kouteki_cent_actual:
+      2020: {value: 67636858, source: "hihokensha/cutout.py:140", match: "67636858", note: "公的年金被保険者数（年央）の実績"}
+      2021: {value: 67446262, source: "hihokensha/cutout.py:141", match: "67446262"}
+      2022: {value: 67435295, source: "hihokensha/cutout.py:142", match: "67435295"}
+    lag_recent: {value: 2, source: "hihokensha/cutout.py:167", match: "y - 2", note: "調整率 = (2 年前の被保険者数 / 5 年前) の 3 乗根 × jyumyo"}
+    lag_old: {value: 5, source: "hihokensha/cutout.py:168", match: "y - 5"}
+    root: {value: 3, source: "hihokensha/cutout.py:168", match: "1.0 / 3.0"}
+    digits: {value: 6, source: "hihokensha/cutout.py:184", match: "raund((cutritu[k]), 6)", note: "率は小数 6 桁"}
+    digits2: {value: 4, source: "hihokensha/cutout.py:185", match: "raund(cutritu2[k], 4)", note: "書く値 1/率 − 1 は小数 4 桁"}
+  classes:                 # 出力 waku-00..57 の分類（港 fout.py の見出し）
+    names:
+      0: {value: "公的計", source: "hihokensha/fout.py:221", match: "公的計"}
+      1: {value: "被用者計", source: "hihokensha/fout.py:221", match: "被用者計"}
+      2: {value: "国年２号", source: "hihokensha/fout.py:221", match: "国年２号"}
+      3: {value: "旧厚(70未満)", source: "hihokensha/fout.py:221", match: "旧厚(70未満)"}
+      4: {value: "旧厚(70以上)", source: "hihokensha/fout.py:221", match: "旧厚(70以上)"}
+      5: {value: "旧厚12種(パート含まず)", source: "hihokensha/fout.py:222", match: "旧厚12種(パート含まず)"}
+      6: {value: "旧厚3種", source: "hihokensha/fout.py:222", match: "旧厚3種"}
+      7: {value: "旧厚短時間(今後の適用拡大対象者を含む)", source: "hihokensha/fout.py:223", match: "旧厚短時間(今後の適用拡大対象者を含む)"}
+      8: {value: "国共2号", source: "hihokensha/fout.py:223", match: "国共2号"}
+      9: {value: "地共2号", source: "hihokensha/fout.py:223", match: "地共2号"}
+      10: {value: "私学2号", source: "hihokensha/fout.py:223", match: "私学2号"}
+      11: {value: "1号計", source: "hihokensha/fout.py:224", match: "1号計"}
+      12: {value: "1号(一般)", source: "hihokensha/fout.py:224", match: "1号(一般)"}
+      13: {value: "1号(任意)", source: "hihokensha/fout.py:224", match: "1号(任意)"}
+      14: {value: "3号計", source: "hihokensha/fout.py:224", match: "3号計"}
+      15: {value: "旧厚3号", source: "hihokensha/fout.py:224", match: "旧厚3号"}
+      16: {value: "国共3号", source: "hihokensha/fout.py:224", match: "国共3号"}
+      17: {value: "地共3号", source: "hihokensha/fout.py:224", match: "地共3号"}
+      18: {value: "私学3号", source: "hihokensha/fout.py:224", match: "私学3号"}
+      19: {value: "人口差分", source: "hihokensha/fout.py:225", match: "人口差分"}
+      20: {value: "人口央", source: "hihokensha/fout.py:225", match: "人口央"}
+      21: {value: "人口末", source: "hihokensha/fout.py:225", match: "人口末"}
+      22: {value: "適用拡大202410計", source: "hihokensha/fout.py:226", match: "適用拡大202410計"}
+      23: {value: "適用拡大202410元１号", source: "hihokensha/fout.py:226", match: "適用拡大202410元１号"}
+      24: {value: "適用拡大202410元３号", source: "hihokensha/fout.py:226", match: "適用拡大202410元３号"}
+      25: {value: "適用拡大202410元その他", source: "hihokensha/fout.py:227", match: "適用拡大202410元その他"}
+      26: {value: "適用拡大１段階目計", source: "hihokensha/fout.py:228", match: "適用拡大１段階目計"}
+      27: {value: "適用拡大１段階目元１号", source: "hihokensha/fout.py:228", match: "適用拡大１段階目元１号"}
+      28: {value: "適用拡大１段階目元３号", source: "hihokensha/fout.py:228", match: "適用拡大１段階目元３号"}
+      29: {value: "適用拡大１段階目元その他", source: "hihokensha/fout.py:229", match: "適用拡大１段階目元その他"}
+      30: {value: "適用拡大１段階目元週30時間以上", source: "hihokensha/fout.py:230", match: "適用拡大１段階目元週30時間以上"}
+      31: {value: "適用拡大１段階目元週20～30時間", source: "hihokensha/fout.py:230", match: "適用拡大１段階目元週20～30時間"}
+      32: {value: "適用拡大１段階目元週20時間未満", source: "hihokensha/fout.py:231", match: "適用拡大１段階目元週20時間未満"}
+      33: {value: "適用拡大１段階目元１号週30時間以上", source: "hihokensha/fout.py:232", match: "適用拡大１段階目元１号週30時間以上"}
+      34: {value: "適用拡大１段階目元１号週20～30時間", source: "hihokensha/fout.py:232", match: "適用拡大１段階目元１号週20～30時間"}
+      35: {value: "適用拡大１段階目元１号週20時間未満", source: "hihokensha/fout.py:233", match: "適用拡大１段階目元１号週20時間未満"}
+      36: {value: "適用拡大１段階目元３号週30時間以上", source: "hihokensha/fout.py:234", match: "適用拡大１段階目元３号週30時間以上"}
+      37: {value: "適用拡大１段階目元３号週20～30時間", source: "hihokensha/fout.py:234", match: "適用拡大１段階目元３号週20～30時間"}
+      38: {value: "適用拡大１段階目元３号週20時間未満", source: "hihokensha/fout.py:235", match: "適用拡大１段階目元３号週20時間未満"}
+      39: {value: "適用拡大１段階目元その他週30時間以上", source: "hihokensha/fout.py:236", match: "適用拡大１段階目元その他週30時間以上"}
+      40: {value: "適用拡大１段階目元その他週20～30時間", source: "hihokensha/fout.py:237", match: "適用拡大１段階目元その他週20～30時間"}
+      41: {value: "適用拡大１段階目元その他週20時間未満", source: "hihokensha/fout.py:238", match: "適用拡大１段階目元その他週20時間未満"}
+      42: {value: "適用拡大２段階目計", source: "hihokensha/fout.py:239", match: "適用拡大２段階目計"}
+      43: {value: "適用拡大２段階目元１号", source: "hihokensha/fout.py:239", match: "適用拡大２段階目元１号"}
+      44: {value: "適用拡大２段階目元３号", source: "hihokensha/fout.py:239", match: "適用拡大２段階目元３号"}
+      45: {value: "適用拡大２段階目元その他", source: "hihokensha/fout.py:240", match: "適用拡大２段階目元その他"}
+      46: {value: "適用拡大２段階目元週30時間以上", source: "hihokensha/fout.py:241", match: "適用拡大２段階目元週30時間以上"}
+      47: {value: "適用拡大２段階目元週20～30時間", source: "hihokensha/fout.py:241", match: "適用拡大２段階目元週20～30時間"}
+      48: {value: "適用拡大２段階目元週20時間未満", source: "hihokensha/fout.py:242", match: "適用拡大２段階目元週20時間未満"}
+      49: {value: "適用拡大２段階目元１号週30時間以上", source: "hihokensha/fout.py:243", match: "適用拡大２段階目元１号週30時間以上"}
+      50: {value: "適用拡大２段階目元１号週20～30時間", source: "hihokensha/fout.py:243", match: "適用拡大２段階目元１号週20～30時間"}
+      51: {value: "適用拡大２段階目元１号週20時間未満", source: "hihokensha/fout.py:244", match: "適用拡大２段階目元１号週20時間未満"}
+      52: {value: "適用拡大２段階目元３号週30時間以上", source: "hihokensha/fout.py:245", match: "適用拡大２段階目元３号週30時間以上"}
+      53: {value: "適用拡大２段階目元３号週20～30時間", source: "hihokensha/fout.py:245", match: "適用拡大２段階目元３号週20～30時間"}
+      54: {value: "適用拡大２段階目元３号週20時間未満", source: "hihokensha/fout.py:246", match: "適用拡大２段階目元３号週20時間未満"}
+      55: {value: "適用拡大２段階目元その他週30時間以上", source: "hihokensha/fout.py:247", match: "適用拡大２段階目元その他週30時間以上"}
+      56: {value: "適用拡大２段階目元その他週20～30時間", source: "hihokensha/fout.py:248", match: "適用拡大２段階目元その他週20～30時間"}
+      57: {value: "適用拡大２段階目元その他週20時間未満", source: "hihokensha/fout.py:249", match: "適用拡大２段階目元その他週20時間未満"}
+    part_base: {value: [0, 1, 2, 7], source: "hihokensha/fout.py:185", match: "(0, 1, 2, 7)", note: "22〜25 列の pkubun（現行 ykubun=1 の値そのまま）"}
+    part_diff:               # 26〜57 列: [pkubun, tkubun, 段階]（段階 1 = ykubun 2 − 1、2 = ykubun 3 − 2）
+      26: {value: [0, 0, 1], source: "hihokensha/fout.py:204", match: "26: (0, 0, 1)"}
+      27: {value: [1, 0, 1], source: "hihokensha/fout.py:204", match: "27: (1, 0, 1)"}
+      28: {value: [2, 0, 1], source: "hihokensha/fout.py:204", match: "28: (2, 0, 1)"}
+      29: {value: [7, 0, 1], source: "hihokensha/fout.py:204", match: "29: (7, 0, 1)"}
+      30: {value: [0, 2, 1], source: "hihokensha/fout.py:205", match: "30: (0, 2, 1)"}
+      31: {value: [0, 1, 1], source: "hihokensha/fout.py:205", match: "31: (0, 1, 1)"}
+      32: {value: [0, 3, 1], source: "hihokensha/fout.py:205", match: "32: (0, 3, 1)"}
+      33: {value: [1, 2, 1], source: "hihokensha/fout.py:206", match: "33: (1, 2, 1)"}
+      34: {value: [1, 1, 1], source: "hihokensha/fout.py:206", match: "34: (1, 1, 1)"}
+      35: {value: [1, 3, 1], source: "hihokensha/fout.py:206", match: "35: (1, 3, 1)"}
+      36: {value: [2, 2, 1], source: "hihokensha/fout.py:207", match: "36: (2, 2, 1)"}
+      37: {value: [2, 1, 1], source: "hihokensha/fout.py:207", match: "37: (2, 1, 1)"}
+      38: {value: [2, 3, 1], source: "hihokensha/fout.py:207", match: "38: (2, 3, 1)"}
+      39: {value: [7, 2, 1], source: "hihokensha/fout.py:208", match: "39: (7, 2, 1)"}
+      40: {value: [7, 1, 1], source: "hihokensha/fout.py:208", match: "40: (7, 1, 1)"}
+      41: {value: [7, 3, 1], source: "hihokensha/fout.py:208", match: "41: (7, 3, 1)"}
+      42: {value: [0, 0, 2], source: "hihokensha/fout.py:209", match: "42: (0, 0, 2)"}
+      43: {value: [1, 0, 2], source: "hihokensha/fout.py:209", match: "43: (1, 0, 2)"}
+      44: {value: [2, 0, 2], source: "hihokensha/fout.py:209", match: "44: (2, 0, 2)"}
+      45: {value: [7, 0, 2], source: "hihokensha/fout.py:209", match: "45: (7, 0, 2)"}
+      46: {value: [0, 2, 2], source: "hihokensha/fout.py:210", match: "46: (0, 2, 2)"}
+      47: {value: [0, 1, 2], source: "hihokensha/fout.py:210", match: "47: (0, 1, 2)"}
+      48: {value: [0, 3, 2], source: "hihokensha/fout.py:210", match: "48: (0, 3, 2)"}
+      49: {value: [1, 2, 2], source: "hihokensha/fout.py:211", match: "49: (1, 2, 2)"}
+      50: {value: [1, 1, 2], source: "hihokensha/fout.py:211", match: "50: (1, 1, 2)"}
+      51: {value: [1, 3, 2], source: "hihokensha/fout.py:211", match: "51: (1, 3, 2)"}
+      52: {value: [2, 2, 2], source: "hihokensha/fout.py:212", match: "52: (2, 2, 2)"}
+      53: {value: [2, 1, 2], source: "hihokensha/fout.py:212", match: "53: (2, 1, 2)"}
+      54: {value: [2, 3, 2], source: "hihokensha/fout.py:212", match: "54: (2, 3, 2)"}
+      55: {value: [7, 2, 2], source: "hihokensha/fout.py:213", match: "55: (7, 2, 2)"}
+      56: {value: [7, 1, 2], source: "hihokensha/fout.py:213", match: "56: (7, 1, 2)"}
+      57: {value: [7, 3, 2], source: "hihokensha/fout.py:213", match: "57: (7, 3, 2)"}
+
+# ---------------------------------------------------------------- レバー（オプション試算。§11.1）
+options:                   # 既定は通常試算。policy/options/*.yaml が 1 つずつ変える（kosoku/options.py）
+  kakudai: {value: 0, source: "検証/実行/run_pipeline.sh:130", note: "被用者保険の適用拡大 0〜5（① MODE / ② flg_part / ③ Part / ⑤ Flg_Part）"}
+  sigo: {value: 0, source: "検証/実行/run_pipeline.sh:131", note: "基礎年金の拠出期間 45 年化 0/1（① MODE45 / ② flg_sigo / ⑤ Flg_Sigo）"}
+  kozax: {value: 0, source: "検証/実行/run_pipeline.sh:132", note: "65 歳以上の在職老齢年金の撤廃 0/1（② flg_kozax）"}
+  houjou: {value: 0, source: "検証/実行/run_pipeline.sh:133", note: "標準報酬月額の上限の見直し 0〜3（② houjou / ⑤ Flg_Houjou）"}
+  tougou: {value: 0, source: "検証/実行/run_pipeline.sh:134", note: "マクロ経済スライドの調整期間の一致 0/1（④ TOUGOU / ⑤ Touitu）"}
+  dmacro: {value: 0, source: "検証/実行/run_pipeline.sh:135", note: "名目下限措置の撤廃 0/1（④ DMACRO / ⑤ Flg_Dmakuro）"}
+  carry: {value: 1, source: "検証/実行/run_pipeline.sh:136", note: "キャリーオーバー 1 = あり（現行）/ 0 = 廃止（④ CARRY / ⑤ Flg_Kmakuro は 1 − carry）"}
+
+# ---------------------------------------------------------------- 指標
+gdp:                       # 名目 GDP（支出側、年度、10億円）。内閣府 SNA 2024年度確報
+  unit: {value: "10億円", source: "kosoku/policy/base_2024.yaml:1", note: "単位"}
+  base:
+    2019: {value: 570618.9, source: "esri:2024ffm1n_jp.xlsx", note: "2024年度国民経済計算年次推計 主要系列表(1)"}
+    2020: {value: 554342.3, source: "esri:2024ffm1n_jp.xlsx"}
+    2021: {value: 576554.0, source: "esri:2024ffm1n_jp.xlsx"}
+    2022: {value: 591651.3, source: "esri:2024ffm1n_jp.xlsx"}
+    2023: {value: 619390.4, source: "esri:2024ffm1n_jp.xlsx"}
+    2024: {value: 642414.7, source: "esri:2024ffm1n_jp.xlsx"}
+  url: {value: "https://www.esri.cao.go.jp/jp/sna/data/data_list/kakuhou/files/2024/2024_kaku_top.html",
+        source: "検証/高速版/計画.md:1", note: "取得 2026-09-21。2025年度確報は未公表"}
+accounts:                  # 勘定（kosoku/accounts.py。フェーズ I）。system は⑤の制度名（stages/s5_emp_shushi/inputs.py:SYSTEMS）
+  kounen:  {kind: {value: employee, source: "kosoku/accounts.py:ledger_of"}, system: {value: kou, source: "stages/s5_emp_shushi/inputs.py:SYSTEMS"}}
+  kokkyo:  {kind: {value: employee, source: "kosoku/accounts.py:ledger_of"}, system: {value: kok, source: "stages/s5_emp_shushi/inputs.py:SYSTEMS"}}
+  chikyo:  {kind: {value: employee, source: "kosoku/accounts.py:ledger_of"}, system: {value: ren, source: "stages/s5_emp_shushi/inputs.py:SYSTEMS"}}
+  shigaku: {kind: {value: employee, source: "kosoku/accounts.py:ledger_of"}, system: {value: sig, source: "stages/s5_emp_shushi/inputs.py:SYSTEMS"}}
+  kokunen: {kind: {value: national, source: "kosoku/accounts.py:ledger_of", note: "④の収支見通し（kiso_nenkin の kekka）"}}
+  kiso:    {kind: {value: pool, source: "kosoku/accounts.py:ledger_of", note: "基礎年金勘定: 拠出金 → 基礎年金給付"}}
+transfers:                 # 流れ。rule は kosoku/accounts.py:ledger_of が知っている名前
+  kiso_kyoshutsu:          # 基礎年金拠出金: 5 制度 → 基礎年金勘定。④の頭割り（拠出金算定対象者で按分。kiso_nenkin/atamawari.py）
+    from: {value: [kounen, kokkyo, chikyo, shigaku, kokunen], source: "kiso_nenkin/atamawari.py:Atamawari"}
+    to: {value: [kiso], source: "kosoku/accounts.py:ledger_of"}
+    rule: {value: atamawari, source: "kosoku/accounts.py:ledger_of"}
+  kokko_kiso:              # 国庫負担: 国 → 各制度。拠出金 × 国庫負担割合 kiso.kokko（2009 年度から 1/2）。1.0 で税方式（options/kiso_tax.yaml）
+    from: {value: [treasury], source: "kosoku/accounts.py:ledger_of"}
+    to: {value: [kounen, kokkyo, chikyo, shigaku, kokunen], source: "kosoku/accounts.py:ledger_of"}
+    rule: {value: share_of_kyoshutsu, source: "kosoku/accounts.py:ledger_of"}
+  shien:                   # 被用者年金一元化の支援金: 厚年 → 共済 3 制度。通常試算では 0（⑤の支援額収入・支出）
+    from: {value: [kounen], source: "kosoku/accounts.py:ledger_of"}
+    to: {value: [kokkyo, chikyo, shigaku], source: "kosoku/accounts.py:ledger_of"}
+    rule: {value: shien, source: "kosoku/accounts.py:ledger_of"}

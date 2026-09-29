@@ -1,0 +1,3 @@
+# マクロ経済スライドの調整期間の一致（load_policy("tougou")。base_2024.yaml の options.* を上書きする）
+options:
+  tougou: {value: 1, source: "検証/実行/run_pipeline.sh:35"}

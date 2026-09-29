@@ -1,0 +1,4 @@
+# 均衡の解法を payg に（load_policy("balance_payg")。kosoku/balance.py。フェーズ H）
+shushi:
+  balance:
+    rule: {value: payg, source: "kosoku/balance.py:RULES"}

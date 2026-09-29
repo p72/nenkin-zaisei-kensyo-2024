@@ -1,0 +1,3 @@
+# 基礎年金の拠出期間 45 年化（load_policy("sigo")。base_2024.yaml の options.* を上書きする）
+options:
+  sigo: {value: 1, source: "検証/実行/run_pipeline.sh:32"}

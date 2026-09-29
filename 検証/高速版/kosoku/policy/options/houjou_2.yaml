@@ -1,0 +1,3 @@
+# 標準報酬月額の上限 83 万円（③④は据え置く）（load_policy("houjou_2")。base_2024.yaml の options.* を上書きする）
+options:
+  houjou: {value: 2, source: "検証/実行/run_pipeline.sh:34"}

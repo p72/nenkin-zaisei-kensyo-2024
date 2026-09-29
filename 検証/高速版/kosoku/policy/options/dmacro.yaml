@@ -1,0 +1,3 @@
+# 名目下限措置の撤廃（load_policy("dmacro")。base_2024.yaml の options.* を上書きする）
+options:
+  dmacro: {value: 1, source: "検証/実行/run_pipeline.sh:36"}
