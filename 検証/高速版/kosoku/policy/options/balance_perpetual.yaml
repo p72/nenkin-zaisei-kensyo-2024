@@ -1,0 +1,4 @@
+# 均衡の解法を perpetual に（load_policy("balance_perpetual")。kosoku/balance.py。フェーズ H）
+shushi:
+  balance:
+    rule: {value: perpetual, source: "kosoku/balance.py:RULES"}

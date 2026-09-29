@@ -1,0 +1,22 @@
+# 原本の不具合を意図どおりに直す（load_policy("fix_bugs")、CLI は --option fix_bugs）
+#
+# 既定（base_2024.yaml）は公表値の再現のために原本どおり。これを重ねると
+# `検証/原本の不具合.md` の J1・J2・J3・B11 を意図どおりにした値で回る。
+# J2 の 0.4616518 は桁だけを直した**推定値**（意図した値は公表資料から確かめられない）。
+# B10（20歳で配列の外を読む）と D6（再加入率が 0）は出力に効かないので切り替えを置かない。
+kounen:
+  tables:
+    tmq: {value: [1875, 1817, 1761, 1707, 1654, 1603, 1553, 1505, 1458, 1413, 1369, 1327, 1286, 1246, 1208, 1170, 1134, 1099, 1065, 1032],
+          source: "emp_kyufu/seid.py:86", port: "emp_kyufu.seid._TMQ_HOUTEI",
+          note: "J1: 1936年度生を 1369（公表の 1.369）に"}
+  siml:
+    shke:
+      ab_factor:
+        ren: {value: 0.4616518, source: "emp_kyufu/shkejuk.py:141", match: "461.6518",
+              note: "J2: 桁だけを直した推定値"}
+kokunen:
+  quirks:
+    b11_izoku_lifetable_sex: {value: false, source: "nat/siml.py:1044", match: "_c_at(G.q, yq, nenrei, seibetu)",
+                              note: "B11: 自分の性別の生命表を引く"}
+    j3_waribiki_ninzu_2023: {value: false, source: "nat/shke.py:449", match: "jukyu_nenrei - 66, 1]",
+                             note: "J3: 2032 年度以降の人数も 2031 年度の係数（= 1）"}

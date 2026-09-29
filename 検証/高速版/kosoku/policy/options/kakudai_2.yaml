@@ -1,0 +1,3 @@
+# 被用者保険の適用拡大 2（load_policy("kakudai_2")。base_2024.yaml の options.* を上書きする）
+options:
+  kakudai: {value: 2, source: "検証/実行/run_pipeline.sh:30", note: "適用拡大 2"}

@@ -1,0 +1,3 @@
+# キャリーオーバーの廃止（load_policy("nocarry")。base_2024.yaml の options.* を上書きする）
+options:
+  carry: {value: 0, source: "検証/実行/run_pipeline.sh:37"}

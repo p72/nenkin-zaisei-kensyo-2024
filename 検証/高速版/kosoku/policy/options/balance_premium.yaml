@@ -1,0 +1,4 @@
+# 均衡の解法を premium に（load_policy("balance_premium")。kosoku/balance.py。フェーズ H）
+shushi:
+  balance:
+    rule: {value: premium, source: "kosoku/balance.py:RULES"}

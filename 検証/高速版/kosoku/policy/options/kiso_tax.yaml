@@ -1,0 +1,6 @@
+# 基礎年金の税方式化（設計例。load_policy("kiso_tax")。kosoku/accounts.py、フェーズ I）
+# 拠出金の国庫負担割合を 1 に → 各制度の基礎年金拠出金と国庫負担が同額になり、基礎年金は全額が国（税）から。
+# ③の国民年金給付の国庫負担割合（kokunen.kokko_wariai）と国民年金の保険料は変えない（設計の主張はしない）
+kiso:
+  kokko:
+    after: {value: 1.0, source: "kosoku/accounts.py:ledger_of", note: "2009 年度以降の拠出金の国庫負担割合"}

@@ -1,0 +1,3 @@
+# 65 歳以上の在職老齢年金の撤廃（③④は据え置く）（load_policy("kozax")。base_2024.yaml の options.* を上書きする）
+options:
+  kozax: {value: 1, source: "検証/実行/run_pipeline.sh:33"}
