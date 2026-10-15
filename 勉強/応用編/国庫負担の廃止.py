@@ -16,6 +16,7 @@ KOKKO レバー（検証/実行/patches/kokko-cut.patch）で④⑤を流し、�
   python3 勉強/応用編/国庫負担の廃止.py ichiritsu-table 3003 3001  # その対照表
   python3 勉強/応用編/国庫負担の廃止.py zenin            # 同じ財源を0歳からの全員に一律給付した場合の額
   python3 勉強/応用編/国庫負担の廃止.py zenin-table 3003 3001      # その対照表
+  python3 勉強/応用編/国庫負担の廃止.py zenin-shogai     # 65歳までに受け取った分を運用して20年で取り崩した場合の損得
 
 前提：通常試算（予備番号 000）が流してあること。①〜③は流し直さない。
 """
@@ -379,6 +380,57 @@ table.t td.lab {{ font-size: 12px; }}</style></head><body><div class="page">
 </div></div></body></html>"""
 
 
+SHOGAI_YEARS = (2027, 2040, 2060, 2080, 2100)
+TORIKUZUSHI = 20                        # 65歳から取り崩す年数
+
+
+def shogai(case):
+    """全員に一律給付した場合の、65歳になる年度ごとの損得（推定）。金額は物価で2024年度に割り戻した月額。
+
+      65歳までに受け取った一律給付を、毎年、経済前提の運用利回り（実質。econ-{case}.csv の2列目）で運用し、
+      65歳から TORIKUZUSHI 年で取り崩す（元利均等）。その月額を、65歳時点の年金＋一律給付に足す。
+      損得の境目は、報酬比例を平均的な会社員40年（モデル世帯の夫）の何%まで持つ人が損をしないか。
+      報酬比例は収入に比例して削られるとし、基礎年金は国庫負担をなくしても変わらない。"""
+    co, _ = _modules()
+    v = f"{case}-{case}-{case}-{case}"
+    econ = {int(float(l.split(",")[0])) + 2000: float(l.split(",")[1]) / 100
+            for l in open(os.path.join(SUURI, "emp", "data", "u-rev", "econ", f"econ-{case}.csv"))}
+    E = lambda y: econ.get(y, econ[max(econ)])
+    rb, rc = co.read_rate(v, "000", SH), co.read_rate(v, "701", SH)
+    s, kw, kw0 = shinkyufu(case, "zenin"), tedori(case, "701"), tedori(case, "000")
+    out = {}
+    for Y in SHOGAI_YEARS:
+        zan = 0.0
+        for y in range(max(START, Y - 65), Y):           # 0〜64歳のうち、START 年度以降の分
+            zan = (zan + s[y]["getsu_r"] * 12) * (1 + E(y + 1))
+        r = E(Y)
+        tsuki = zan * r / (1 - (1 + r) ** -TORIKUZUSHI) / 12
+        t1, t0, g = kw[Y][1], kw0[Y][1], s[Y]["getsu_r"]
+        hirei0, hirei1 = rb[Y]["代替率(比例)"] * t0, rc[Y]["代替率(比例)"] * t1
+        kiso = rb[Y]["代替率(基礎)"] / 2 * t0
+        out[Y] = dict(zan=zan, tsuki=tsuki, kyufu=g, r=r,
+                      fufu=(rb[Y]["所得代替率"] * t0, rc[Y]["所得代替率"] * t1 + 2 * (g + tsuki)),
+                      tanshin=(hirei0 + kiso, hirei1 + kiso + g + tsuki),
+                      kiso=(kiso, kiso + g + tsuki),
+                      sakai=(g + tsuki) / (hirei0 - hirei1))
+    return out
+
+
+def report_shogai():
+    for case, cname in CASES:
+        o = shogai(case)
+        print(f"{cname}（運用利回り 実質{o[2060]['r'] * 100:.1f}%、{TORIKUZUSHI}年で取り崩し）")
+        print("| 65歳になる年度 | 65歳時点の残高（1人） | 夫婦 | 会社員40年の単身 | 基礎年金だけの単身 | 損得の境目（単身／夫婦） |")
+        print("|---|---|---|---|---|---|")
+        f = lambda a: (f"{a[0] / 1e4:.1f}→{a[1] / 1e4:.1f}（**{(a[1] - a[0]) / 1e4:+.1f}**）"
+                       .replace("+0.0", "±0.0").replace("-0.0", "±0.0").replace("-", "−").replace("+", "＋"))
+        for Y in SHOGAI_YEARS:
+            x = o[Y]
+            print(f"| {Y} | {x['zan'] / 1e4:,.0f}万円 | {f(x['fufu'])} | {f(x['tanshin'])} | {f(x['kiso'])} "
+                  f"| {x['sakai'] * 100:.0f}%／{2 * x['sakai'] * 100:.0f}% |")
+        print()
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "run":
         run(sys.argv[2])
@@ -394,5 +446,7 @@ if __name__ == "__main__":
         report_shinkyufu("zenin")
     elif len(sys.argv) >= 3 and sys.argv[1] == "zenin-table":
         table_shinkyufu(sys.argv[2:], "zenin")
+    elif len(sys.argv) == 2 and sys.argv[1] == "zenin-shogai":
+        report_shogai()
     else:
         sys.exit(__doc__)
