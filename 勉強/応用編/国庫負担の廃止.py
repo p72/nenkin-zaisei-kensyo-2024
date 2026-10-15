@@ -14,6 +14,8 @@ KOKKO レバー（検証/実行/patches/kokko-cut.patch）で④⑤を流し、�
   python3 勉強/応用編/国庫負担の廃止.py table 3003 3001  # 財政見通し対照表（勉強/応用編/図/）
   python3 勉強/応用編/国庫負担の廃止.py ichiritsu        # 浮いた財源を65歳以上に一律給付した場合の額
   python3 勉強/応用編/国庫負担の廃止.py ichiritsu-table 3003 3001  # その対照表
+  python3 勉強/応用編/国庫負担の廃止.py zenin            # 同じ財源を0歳からの全員に一律給付した場合の額
+  python3 勉強/応用編/国庫負担の廃止.py zenin-table 3003 3001      # その対照表
 
 前提：通常試算（予備番号 000）が流してあること。①〜③は流し直さない。
 """
@@ -166,7 +168,7 @@ def table(cases):
 
 
 # ---------------------------------------------------------------------------
-# 一律給付：国が払わずに済んだ額を、その年度の65歳以上の全員に同じ額で配る
+# 一律給付：国が払わずに済んだ額を、その年度の65歳以上の全員（または0歳からの全員）に同じ額で配る
 # ---------------------------------------------------------------------------
 def pop65(case):
     """①被保険者推計が使う人口（男女計）のうち65歳以上（100歳以上を含む）。人。"""
@@ -175,6 +177,26 @@ def pop65(case):
     L = list(csv.reader(open(p, encoding="utf-8", errors="replace")))
     i = L[1].index("65")
     return {int(r[2]): sum(float(x) for x in r[i:]) for r in L[2:] if len(r) > 5 and r[1] == "0"}
+
+
+def pop_all(case):
+    """①被保険者推計が読む将来推計人口（男 pop1・女 pop2、0〜105歳以上、外国人を含む総人口）の合計。人。
+    両ケースとも出生中位・死亡中位・入国超過16.4万人（run_pipeline.sh の JIN=1 QX=1 NC=0）なので 110 番。
+    15歳以上の和は①の waku-20 と一致する。"""
+    import csv
+    out = {}
+    for sx in ("1", "2"):
+        p = os.path.join(SUURI, "wakuc", "data", "sinj", f"pop{sx}-110.csv")
+        for r in list(csv.reader(open(p, encoding="cp932")))[1:]:
+            out[int(r[0])] = out.get(int(r[0]), 0.) + sum(float(x) for x in r[3:])
+    return out
+
+
+# 人口の関数, 表の見出し, 配る相手（副題・条件・注の言い方）, 図のファイル名の後ろ
+WHO = {"65": dict(pop=pop65, th="65歳<br>以上", sub="65歳以上", jouken="65歳以上の全員", chu="65歳以上人口",
+                  file="一律給付"),
+       "zenin": dict(pop=pop_all, th="全人口", sub="国民全員（0歳から）", jouken="0歳からの全員（子どもを含む）",
+                     chu="全人口（0歳から）", file="全員一律給付")}
 
 
 def tedori(case, yobi):
@@ -196,9 +218,9 @@ def tedori(case, yobi):
     return out
 
 
-def shinkyufu(case):
+def shinkyufu(case, who="65"):
     """年度ごとの一律給付。月額（名目・物価で2024年度に割り戻し）と手取りに対する割合。"""
-    c, P, kw = detail(case, "701"), pop65(case), tedori(case, "701")
+    c, P, kw = detail(case, "701"), WHO[who]["pop"](case), tedori(case, "701")
     out = {}
     for y in range(START, 2121):
         m = c[y]["naiyaku"] * 1e12 / P[y] / 12
@@ -207,13 +229,13 @@ def shinkyufu(case):
     return out
 
 
-def report_shinkyufu():
+def report_shinkyufu(who="65"):
     co, _ = _modules()
     for case, cname in CASES:
         v = f"{case}-{case}-{case}-{case}"
-        s, rb, rc = shinkyufu(case), co.read_rate(v, "000", SH), co.read_rate(v, "701", SH)
+        s, rb, rc = shinkyufu(case, who), co.read_rate(v, "000", SH), co.read_rate(v, "701", SH)
         print(f"{cname}")
-        print("| 年度 | 財源（国が払わずに済んだ額） | 65歳以上 | 一律給付（月額） | 物価で2024年度に割り戻し "
+        print(f"| 年度 | 財源（国が払わずに済んだ額） | {WHO[who]['sub']} | 一律給付（月額） | 物価で2024年度に割り戻し "
               "| 手取りに対する割合 | モデル世帯の所得代替率 現行 → 国庫負担なし → ＋一律給付 |")
         print("|---|---|---|---|---|---|---|")
         for y in YEARS_S:
@@ -223,12 +245,19 @@ def report_shinkyufu():
                   f"| {rb[y]['所得代替率']*100:.1f}% → {rc[y]['所得代替率']*100:.1f}% → "
                   f"{rc[y]['所得代替率']*100 + 2 * t['wari']:.1f}% |")
         print()
+        w, m = s[2120]["wari"], ichiritsu(case)
+        print(f"2120年度 単身 基礎年金だけ {rc[2120]['代替率(基礎)']*50:.1f}% → {rc[2120]['代替率(基礎)']*50 + w:.1f}%、"
+              f"平均賃金40年 {rb[2120]['代替率(比例)']*100 + rb[2120]['代替率(基礎)']*50:.1f}% → "
+              f"{rc[2120]['代替率(比例)']*100 + rc[2120]['代替率(基礎)']*50:.1f}% → "
+              f"{rc[2120]['代替率(比例)']*100 + rc[2120]['代替率(基礎)']*50 + w:.1f}%、"
+              f"損得なしの報酬比例 現行の{w / (1 - m) / (rb[2120]['代替率(比例)'] * 100) * 100:.0f}%")
+        print()
 
 
 YEARS_S = (2027, 2030, 2035, 2040, 2050, 2060, 2080, 2100, 2120)
 
 
-def table_shinkyufu(cases):
+def table_shinkyufu(cases, who="65"):
     """国庫負担なし＋一律給付の対照表を 勉強/応用編/図/ に書く。
     厚生年金の表は国庫負担なしの対照表と同じで、所得代替率に一律給付の列を足す。
     国民年金は現行制度と同じなので、代わりに一律給付の表を置く。"""
@@ -241,9 +270,9 @@ def table_shinkyufu(cases):
         m = ichiritsu(case)
         T.SCEN = (("000", "000", "現行制度", None), ("701", "701", "国庫負担なし＋一律給付", None))
         kk, d = T.load(case)
-        s = shinkyufu(case)
-        html = _page_shinkyufu(case, m, kk, d, s, T)
-        name = f"対照表_{case}_国庫負担廃止_一律給付"
+        s = shinkyufu(case, who)
+        html = _page_shinkyufu(case, m, kk, d, s, T, who)
+        name = f"対照表_{case}_国庫負担廃止_{WHO[who]['file']}"
         hp = os.path.join(out, name + ".html")
         with open(hp, "w", encoding="utf-8") as f:
             f.write(html)
@@ -261,8 +290,9 @@ def table_shinkyufu(cases):
         print("書き出し:", os.path.join(out, name + ".png"), "/ .pdf")
 
 
-def _page_shinkyufu(case, m, kk, d, s, T):
+def _page_shinkyufu(case, m, kk, d, s, T, who="65"):
     f1 = T.f1
+    W = WHO[who]
     cols = ("収入合計", "保険料収入", "運用収入", "国庫負担", "支出合計",
             "基礎年金拠出金", "独自給付", "収支差引残", "年度末積立金")
     trs = []
@@ -299,7 +329,7 @@ def _page_shinkyufu(case, m, kk, d, s, T):
         t = s[y]
         sk.append(f"<tr><td class='y'>{y}</td><td>{f1(t['zaigen'])}</td><td>{t['pop'] / 1e4:,.0f}</td>"
                   f"<td>{t['getsu']:,.0f}</td><td>{t['getsu_r']:,.0f}</td><td>{t['wari']:.2f}</td></tr>")
-    head_sk = """<tr><th>年度</th><th>財源<br><small>国が払わずに<br>済んだ額</small></th><th>65歳<br>以上</th>
+    head_sk = f"""<tr><th>年度</th><th>財源<br><small>国が払わずに<br>済んだ額</small></th><th>{W['th']}</th>
 <th>一律給付<br>月額</th><th>同<br><small>物価で2024年度<br>に割り戻し</small></th><th>現役の<br>手取りに<br>対する割合</th></tr>
 <tr class="unit"><td>西暦</td><td>兆円</td><td>万人</td><td>円</td><td>円</td><td>%</td></tr>"""
 
@@ -319,11 +349,11 @@ def _page_shinkyufu(case, m, kk, d, s, T):
     return f"""<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>{T.CSS}
 table.t td.lab {{ font-size: 12px; }}</style></head><body><div class="page">
 <h1>財政見通し対照表<span class="stamp">非公式</span></h1>
-<div class="sub">現行制度と、厚生年金への国庫負担をなくし浮いた財源を65歳以上に一律給付した場合（思考実験）の対照表</div>
+<div class="sub">現行制度と、厚生年金への国庫負担をなくし浮いた財源を{W['sub']}に一律給付した場合（思考実験）の対照表</div>
 <div class="cond">○ 人口：出生中位、死亡中位、外国人の入国超過数16.4万人　○ 経済：{T.CASES[case]}<br>
 ○ 国庫負担なし：{START}年度から、厚生年金（被用者年金4制度）への国庫負担をなくす。基礎年金拠出金は全額を厚生年金が払い、
 {START}年度から報酬比例の給付（既に受け取っている人を含む）を一律に{cut:.1f}%減らして2120年度に均衡させた<br>
-○ 一律給付：国が払わずに済んだ額（厚生年金の国庫負担に当たる額）を、その年度の65歳以上の全員に同じ額で毎年配る。
+○ 一律給付：国が払わずに済んだ額（厚生年金の国庫負担に当たる額）を、その年度の{W['jouken']}に同じ額で毎年配る。
 年金制度の外の給付で、厚生年金・国民年金の収支には入らない<br>
 ○ 網かけの行が国庫負担なし＋一律給付。<b style="font-weight:bold">太字</b>は現行制度と値が違うところ</div>
 <h2>厚生年金（被用者年金4制度計）</h2>
@@ -340,7 +370,7 @@ table.t td.lab {{ font-size: 12px; }}</style></head><body><div class="page">
 同じ会社員で、どちらも現役男子の平均手取りに対する比率。<br><br>
 <b style="font-weight:bold">一律給付は1人ずつ配るので、夫婦は2人分になる。</b>報酬比例が現行の約{even:.0f}%より少ない人
 （会社員の期間が短い人、賃金が低い人、基礎年金だけの人）は、国庫負担なし＋一律給付のほうが年金が多くなる（推定）。<br><br>
-一律給付の額は、国が払わずに済んだ額（厚生年金の国庫負担に当たる額）を①被保険者推計が使う65歳以上人口で割ったもの。
+一律給付の額は、国が払わずに済んだ額（厚生年金の国庫負担に当たる額）を①被保険者推計が使う{W['chu']}で割ったもの。
 年金を受け取っていない人も含めて配る。</div></div></div>
 <div class="notes">
 （注1）厚生年金は、公表の「厚生年金の財政見通し」と同じく被用者年金4制度（厚生年金・国共済・地共済・私学共済）の合計。「報酬比例」には厚生年金の独自給付（定額・加給・加算）を含む。国庫負担なしの行では「国庫負担」の欄が0になる。<br>
@@ -360,5 +390,9 @@ if __name__ == "__main__":
         report_shinkyufu()
     elif len(sys.argv) >= 3 and sys.argv[1] == "ichiritsu-table":
         table_shinkyufu(sys.argv[2:])
+    elif len(sys.argv) == 2 and sys.argv[1] == "zenin":
+        report_shinkyufu("zenin")
+    elif len(sys.argv) >= 3 and sys.argv[1] == "zenin-table":
+        table_shinkyufu(sys.argv[2:], "zenin")
     else:
         sys.exit(__doc__)
