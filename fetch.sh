@@ -32,6 +32,9 @@ set -e
 ROOT=$(cd "$(dirname "$0")" && pwd)
 DEST="$ROOT/papers"
 CACHE="${FETCH_CACHE:-$ROOT/.cache}"
+# 取得済みの zip を取得したままのバイト列で保存しておく場所（リンク切れ対策）。
+# ここに SHA256 の合う zip があれば、ダウンロードせずにそれを使う。無ければ何もしない
+SAVED="$ROOT/archive/mhlw"
 
 # 取得物: 展開先ディレクトリ名|URL|SHA256|用途|必須か
 ITEMS=(
@@ -108,6 +111,9 @@ fetch_one() {   # fetch_one <name> <url> <sha256> <use>
 
     if [ -f "$zip" ] && [ "$(sha256sum "$zip" | cut -d' ' -f1)" = "$sha" ]; then
         echo "    取得済み（SHA256 一致）"
+    elif [ -f "$SAVED/$name.zip" ] && [ "$(sha256sum "$SAVED/$name.zip" | cut -d' ' -f1)" = "$sha" ]; then
+        echo "    archive/mhlw/ の保存分を使います（SHA256 一致。ネットには出ません）"
+        cp "$SAVED/$name.zip" "$zip"
     else
         [ -f "$zip" ] && echo "    キャッシュのハッシュが合わないので取り直します"
         echo "    取得中 $url"
