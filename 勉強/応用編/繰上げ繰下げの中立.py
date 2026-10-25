@@ -13,8 +13,10 @@
   死亡率：③の入力 QX-M2023.csv（2023年推計・死亡中位、2019〜2070年。2071年以降は2070年の値）。
           生まれた年度の世代を、その年ごとの死亡率で追いかける（コホート）。男女平均は生存率の単純平均
   割引率：実質運用利回り（対物価）。経済前提 econ-XXXX.csv の長期の値と、国債利回りからの目安
-  スライド：④のカット率 cuta（基礎年金）。既裁定の年金は物価で改定（実質一定）とみなし、
-            マクロ経済スライドで目減りする分だけを追う。使うときは通常試算（000）の出力が要る
+  実質の年金額：基礎年金の年齢別の満額（③の改定率 KOKUKAITE で作る。全員に満額.py の mangaku）
+            × ④のカット率 cuta ÷ 物価。マクロ経済スライドの目減りと、既裁定の8割下支え
+            （既裁定の改定率が新規裁定の8割を下回ると賃金で改定。高成長実現では2043年度から
+            80歳以上に効く）が入る。使うときは通常試算（000）の出力が要る
   年金は年の真ん中にまとめて払う形で近似する
 
 使い方（リポジトリの直下で）
@@ -24,6 +26,7 @@
   スライド込みの行は、通常試算（検証/実行/run_pipeline.sh 3001、3003 1 1 0 2）を流してあるときだけ出る。
 """
 import csv
+import importlib.util
 import os
 import sys
 
@@ -100,19 +103,26 @@ def mochidashi(s, r, idx=None, zou=0.007, gen=0.004):
 
 
 def slide(case, birth=BIRTH):
-    """基礎年金のマクロ経済スライドによる目減り（65歳=1）。④の cuta を世代に沿って読む。出力が無ければ None。"""
+    """受け取り始めたあとの基礎年金の実質の額（65歳=1）。世代に沿って読む。出力が無ければ None。
+    ③の満額（改定率。既裁定の8割下支えを含む）× ④のカット率（マクロ経済スライド）÷ 物価。"""
     v = f"{case}-{case}-{case}-{case}"
     p = suuri_env.suuri("emp", "rslt", "ez_arev", "cutr", f"cuta-{v}-1120-000.csv")
     if not os.path.exists(p):
         return None
-    cut = {}
-    for line in open(p):
-        f = [x for x in line.strip().split(",") if x.strip()]
-        cut[int(float(f[0])) + 2000] = {63 + j: float(x) for j, x in enumerate(f[1:])}
+    sp = importlib.util.spec_from_file_location("zenin", os.path.join(HERE, "全員に満額.py"))
+    M = importlib.util.module_from_spec(sp)
+    sp.loader.exec_module(M)
+    F, cut = M.mangaku(case), M._read_cut(p)
+    P, p_ = {}, 1.0
+    for r in csv.reader(open(suuri_env.suuri("emp", "data", "u-rev", "econ", f"econ-{case}.csv"))):
+        if r and r[0].strip().lstrip("-").isdigit():
+            p_ *= 1 + float(r[6]) / 100
+            P[2000 + int(r[0])] = p_
     idx = {}
     for a in range(60, AMAX + 1):
-        c = cut[max(min(birth + a, max(cut)), min(cut))]
-        idx[a] = c.get(max(a, 63), c[max(c)])
+        y = max(min(birth + a, max(cut), max(F)), min(F))
+        c = cut[y].get(max(a, 63), cut[y][max(cut[y])])
+        idx[a] = F[y][min(a, 115)] * c / P[y]
     return {a: x / idx[65] for a, x in idx.items()}
 
 
@@ -132,7 +142,7 @@ def report():
     for case, name, r in (("3003", "過去30年投影", 0.022), ("3001", "高成長実現", 0.034)):
         idx = slide(case)
         if idx:
-            rows.append((f"{name} {r * 100:.1f}%＋基礎年金のスライド", r, idx))
+            rows.append((f"{name} {r * 100:.1f}%＋基礎年金の実質額", r, idx))
             c0, c1 = churitsu(0, r), churitsu(0, r, idx)
             print(f"  スライド込み（{name}）：繰下げ70歳 {c0[('繰下げ', 70)] * 100:.2f}%→{c1[('繰下げ', 70)] * 100:.2f}%、"
                   f"75歳 {c0[('繰下げ', 75)] * 100:.2f}%→{c1[('繰下げ', 75)] * 100:.2f}%、"
@@ -175,7 +185,7 @@ def graph():
     if idx:
         m = mochidashi(0, 0.022, idx)
         a.plot(xs, [m[x] for x in xs], color="#2f6fb3", lw=2, ls="--", marker="o", ms=4, mfc="white",
-               label="過去30年投影＋基礎年金のスライド")
+               label="過去30年投影＋基礎年金の実質額（スライド）")
     a.axhline(0, color="#333", lw=0.8)
     a.axvline(65, color="#999", lw=0.6, ls=":")
     a.set_xticks(xs[::1], [str(x) if x % 5 == 0 or x in (68, 72) else "" for x in xs])

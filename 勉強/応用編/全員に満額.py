@@ -144,7 +144,8 @@ def pop_by_age(case):
 def mangaku(case):
     """年齢別の満額（年額・スライド前）。{年度: {年齢: 円}}。
     67歳以下は ROREI の「基礎年金満額（基本額）」の先頭の列（J4 でもこの列だけは正しい）。
-    68歳以上は、前年度の1つ下の年齢の満額 × KOKUKAITE の単年度改定率。2022年度は全年齢が同額。"""
+    68歳以上は、前年度の1つ下の年齢の満額 × KOKUKAITE の単年度改定率。2022年度は全年齢が同額。
+    KOKUKAITE には既裁定の8割下支えが入っている（高成長実現では2048年度以降、80歳以上が賃金の率）。"""
     f = os.path.join(SUURI, "nat", "rslt", f"ROREI{case}-{case}-{case}.csv")
     L = open(f, encoding="utf-8", errors="replace").read().split("\n")
     i = [k for k, l in enumerate(L) if l.startswith("基礎年金満額（基本額）")][0]
