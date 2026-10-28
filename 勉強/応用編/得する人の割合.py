@@ -136,6 +136,10 @@ def report():
         print()
 
 
+# 図の題名・注の追記・ファイル名の後ろ。一律給付の上乗せ.py が上乗せの場合に書き換える
+TITLE = "厚生年金の国庫負担を廃止して国民全員に一律給付（財政均衡）"
+NOTE_ADD = ""
+SUFFIX = ""
 NOTE = ("非公式：厚生労働省の試算ではない。厚労省「年金額の分布推計」（2024年財政検証 関連資料。65歳時点の老齢年金月額の分布、物価で2024年度に割り戻し）に、"
         "独自のレバー（国庫負担の廃止と報酬比例の一律カット）の損得を当てはめた推定。年金月額のうち基礎年金の満額までを基礎年金、残りを報酬比例とみなす。"
         "損得は一律給付（0〜64歳の分は年金と同じ実質の運用利回りで65歳まで運用）と報酬比例のカットの、65歳時点の価値（2024年度の物価）の差。"
@@ -188,11 +192,11 @@ def graph():
     h, l = ax[0][0].get_legend_handles_labels()
     h2, l2 = ax[1][0].get_legend_handles_labels()
     fig.legend(h + h2, l + l2, loc="upper center", ncol=3, frameon=False, fontsize=10, bbox_to_anchor=(0.5, 0.955))
-    fig.suptitle("厚生年金の国庫負担を廃止して国民全員に一律給付（財政均衡）：得をする人の割合と、世代内・世代間の再分配"
+    fig.suptitle(TITLE + "：" + ("\n" if SUFFIX else "") + "得をする人の割合と、世代内・世代間の再分配"
                  "（厚労省の年金額の分布推計で重み付け・非公式の推定）", fontsize=12, y=0.99)
-    G._note(fig, NOTE)
+    G._note(fig, NOTE + NOTE_ADD)
     fig.tight_layout(rect=(0, 0.07, 1, 0.9))
-    out = os.path.join(HERE, "図", "得する人の割合.png")
+    out = os.path.join(HERE, "図", f"得する人の割合{SUFFIX}.png")
     fig.savefig(out, dpi=150, facecolor="white")
     plt.close(fig)
     print("書き出し:", out)
