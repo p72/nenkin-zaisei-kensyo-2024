@@ -124,12 +124,15 @@ def report():
             o = r[c]
             print(f"| {c}（{c + 65}） | {o['計']['share'] * 100:.0f}% | {o['男']['share'] * 100:.0f}% | {o['女']['share'] * 100:.0f}% | "
                   f"{o['男']['T']:.1f}万円／{o['女']['T']:.1f}万円 |")
-        print("\n| 生まれた年度 | 1人あたり平均（万円） | うち得をする人の分 | うち損をする人の分 | 男性の平均 | 女性の平均 |")
-        print("|---|---|---|---|---|---|")
+        print("\n| 生まれた年度 | 男女計の平均（万円） | 男性の平均 | 女性の平均 | 得をする人の分 | 損をする人の分 | 得をする人1人あたり | 損をする人1人あたり |")
+        print("|---|---|---|---|---|---|---|---|")
         for c in COHORTS:
             o = r[c]
-            print(f"| {c} | {o['計']['mean']:+,.0f} | {o['計']['gain']:+,.0f} | {o['計']['loss']:+,.0f} | "
-                  f"{o['男']['mean']:+,.0f} | {o['女']['mean']:+,.0f} |")
+            t = o["計"]
+            pw = t["gain"] / t["share"] if t["share"] > 0 else 0.0
+            pl = t["loss"] / (1 - t["share"]) if t["share"] < 1 else 0.0
+            print(f"| {c} | {t['mean']:+,.0f} | {o['男']['mean']:+,.0f} | {o['女']['mean']:+,.0f} | "
+                  f"{t['gain']:+,.0f} | {t['loss']:+,.0f} | {pw:+,.0f} | {pl:+,.0f} |")
         print()
 
 
@@ -162,14 +165,16 @@ def graph():
         g = [r[c]["計"]["gain"] for c in cs]
         lo = [r[c]["計"]["loss"] for c in cs]
         m = [r[c]["計"]["mean"] for c in cs]
-        b.bar(cs, g, width=3.2, color="#2a78d6", label="得をする人の分（世代の中で受け取る側）")
-        b.bar(cs, lo, width=3.2, color="#d9622b", label="損をする人の分（世代の中で出す側）")
-        b.plot(cs, m, color="#111", marker="D", ms=6, lw=1.6, label="1人あたり平均（世代全体の得・損）")
+        b.bar(cs, g, width=3.2, color="#a9d8bd", label="得をする人の分（世代の全員で割った値）")
+        b.bar(cs, lo, width=3.2, color="#f3c1ad", label="損をする人の分（同）")
+        for sx, lab in (("男", "男性の平均"), ("女", "女性の平均")):
+            b.plot(cs, [r[c][sx]["mean"] for c in cs], color=col[sx], marker="o", ms=4.5, lw=1.6, ls="--", label=lab)
+        b.plot(cs, m, color="#111", marker="D", ms=6, lw=1.8, label="男女計の平均（世代全体の得・損）")
         for x, y in zip(cs, m):
             b.annotate(f"{y:+,.0f}", (x, y), xytext=(0, 9 if y >= 0 else -14), textcoords="offset points",
                        ha="center", fontsize=8.5, color="#111")
         b.axhline(0, color="#555", lw=0.9)
-        b.set_title("1人あたりの損得（男女計、万円、65歳時点・今の物価）", fontsize=11)
+        b.set_title("1人あたりの損得（万円、65歳時点・今の物価）", fontsize=11)
         b.set_xlabel("生まれた年度（上の目盛りは65歳になる年度）")
         if j == 0:
             b.set_ylabel("万円")
