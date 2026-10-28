@@ -165,6 +165,10 @@ def report():
         print()
 
 
+# 図の題名・注の追記・ファイル名の後ろ。一律給付の上乗せ.py が上乗せの場合に書き換える（CASES も絞る）
+TITLE = "厚生年金の国庫負担を廃止して国民全員に一律給付（財政均衡）"
+NOTE_ADD = ""
+SUFFIX = ""
 NOTE = ("非公式：厚生労働省の試算ではない。2024年財政検証の計算プログラムに独自のレバー（国庫負担の廃止と報酬比例の一律カット）を加えた試算から推定。"
         "受給総額は65歳以降の年金＋一律給付（0〜64歳の分は65歳まで運用して足す）を、将来推計人口から作った生存率で重み付けし、"
         "年金と同じ実質の運用利回りで65歳時点の価値（2024年度の物価）にしたもの。標準報酬月額は2024年度の賃金水準で、"
@@ -176,7 +180,7 @@ def graph():
     matplotlib, plt = G._fig_base()
     # 標準報酬月額は大きさの違いなので、同じ色相の濃淡で表す（低い報酬ほど薄く）
     cols = ("#f2a65a", "#e07b39", "#c4562a", "#9c3a1f", "#6b2615", "#3a130a")
-    fig, ax = plt.subplots(2, 4, figsize=(21, 10.5), sharex=True, sharey=True)
+    fig, ax = plt.subplots(2, len(CASES), figsize=(5.25 * len(CASES), 10.5), sharex=True, sharey=True, squeeze=False)
     cs = [c for c in COHORTS if c <= 2030]
     for j, (case, cname) in enumerate(CASES):
         _, W24, cut = keisan(case)
@@ -204,11 +208,11 @@ def graph():
                 a.set_ylabel("受給総額の増減（万円、65歳時点・今の物価）")
     h, l = ax[0][0].get_legend_handles_labels()
     fig.legend(h, l, loc="upper center", ncol=3, frameon=False, fontsize=10, bbox_to_anchor=(0.5, 0.955))
-    fig.suptitle("厚生年金の国庫負担を廃止して国民全員に一律給付（財政均衡）：標準報酬月額別・世代別の損得（非公式の思考実験）"
+    fig.suptitle(TITLE + "：" + ("\n" if SUFFIX else "") + "標準報酬月額別・世代別の損得（非公式の思考実験）"
                  "　●は損から得に変わる生まれ年度", fontsize=12.5, y=0.99)
-    G._note(fig, NOTE)
+    G._note(fig, NOTE + NOTE_ADD)
     fig.tight_layout(rect=(0, 0.07, 1, 0.9))
-    out = os.path.join(HERE, "図", "標準報酬別の損得.png")
+    out = os.path.join(HERE, "図", f"標準報酬別の損得{SUFFIX}.png")
     fig.savefig(out, dpi=150, facecolor="white")
     plt.close(fig)
     print("書き出し:", out)
