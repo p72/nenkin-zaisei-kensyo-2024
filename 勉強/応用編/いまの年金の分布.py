@@ -225,14 +225,19 @@ _SON = {}
 
 
 def sontoku(case):
-    """{"cut", "bi"（2027年度の一律給付・月額・万円）, "thr": {(生年度, 性): 報酬比例の分かれ目（月額・万円）}}"""
+    """{"cut", "bi"（2027年度の一律給付・月額・万円）, "thr": {(生年度, 性): 報酬比例の分かれ目（月額・万円）},
+    "kiso": {生年度: 65歳時点の基礎年金の満額（実質・月額・万円）}}。式は 得する人の割合.py の keisan と同じ"""
     if case in _SON:
         return _SON[case]
     G = _load("tokusuru", "得する人の割合.py").G
     S, SV = G._series(case, "unyo"), G._survival(case)
     R = S["R"]
-    thr = {}
-    for c in range(1930, 1960):
+    thr, kiso = {}, {}
+    for c in range(1930, 2005):
+        pre = 0.0                                          # 0〜64歳の一律給付を65歳まで運用した額
+        for a in range(65):
+            pre = (pre + S["ichi"]["zenin"].get(c + a, 0.0)) * (1 + R[c + a + 1])
+        kiso[c] = S["KISO"][65, max(c + 65, 2005)] / 12 / 1e4
         for sx, key in (("男", "1"), ("女", "2")):
             s = d = 1.0
             bi = ann = 0.0
@@ -244,14 +249,86 @@ def sontoku(case):
                 bi += d * s * S["ichi"]["zenin"].get(y, 0.0)
                 if y >= G.START:
                     ann += d * s * 12
-            thr[c, sx] = bi / 1e4 / (S["cut"] * ann)          # 65歳より前の一律給付は無い世代
+            thr[c, sx] = (pre + bi) / 1e4 / (S["cut"] * ann)
     k = G.K.shinkyufu(case, "zenin")[2027]
-    _SON[case] = dict(cut=S["cut"], bi=k["getsu_r"] / 1e4, thr=thr)
+    _SON[case] = dict(cut=S["cut"], bi=k["getsu_r"] / 1e4, thr=thr, kiso=kiso)
     return _SON[case]
 
 
 def _son(case, sx):
     return sontoku(case)["thr"][REP, sx]
+
+
+
+SEDAI = (1969, 1979, 1989, 1999, 2004)
+
+
+def _sedai_lines(ax, case, b):
+    """生まれた年度ごとの損得の分かれ目（年金月額・万円）を縦線で引く。男女の分かれ目の真ん中に線、文字は男女の幅"""
+    s = sontoku(case)
+    lo, hi = ax.get_xlim()
+    cur = [b["B"] + s["thr"][c, sx] for c in range(1930, 1960) for sx in ("男", "女")]
+    ax.axvspan(min(cur), max(cur), color="#222", alpha=.18, zorder=3)
+    ax.text(max(cur) + .12, 300, f"1930〜1959年度生まれ\n（いまの受給者）\n{min(cur):.1f}〜{max(cur):.1f}万円", fontsize=8.5,
+            va="top", color="#222", zorder=4, bbox=dict(boxstyle="square,pad=0.15", fc="white", ec="none", alpha=.85))
+    for k, c in enumerate(SEDAI):
+        v = [s["kiso"][c] + s["thr"][c, sx] for sx in ("男", "女")]
+        x = sum(v) / 2
+        lab = f"{c}年度生まれ  {min(v):.1f}〜{max(v):.1f}万円"
+        if x < hi - 0.6:
+            ax.axvline(x, color="#6a3d9a", lw=1.4, ls="--", zorder=3)
+            ax.text(x + .1, 40, lab, rotation=90, fontsize=8.5, color="#6a3d9a", va="bottom", zorder=4,
+                    bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=.8))
+        else:
+            ax.annotate(lab + " →", (hi - .1, 150 - 22 * k), ha="right", fontsize=8.5, color="#6a3d9a", zorder=4,
+                        bbox=dict(boxstyle="square,pad=0.1", fc="white", ec="none", alpha=.8))
+
+
+def _graph_sontoku(G, plt, Patch, b, P, w, xs, axis, sedai):
+    """図2：損する人・得する人。sedai なら生まれた年度ごとの分かれ目の縦線を足した複製"""
+    fig, axs = plt.subplots(2, 1, figsize=(14, 11.5), sharex=True)
+    for j, (ax, (case, cname)) in enumerate(zip(axs, CASES)):
+        s = sontoku(case)
+        txt = []
+        tl = tn = 0.0
+        for sx, off, cm in (("男", -w / 2, "#2f5f9e"), ("女", w / 2, "#c0504d")):
+            th = _son(case, sx)
+            gain = hist([p for p in P[sx] if p[2] <= th])[0]
+            loss = hist([p for p in P[sx] if p[2] > th])[0]
+            ax.bar([x + off for x in xs], [x / 1e4 for x in gain], w, color=cm, alpha=.35)
+            ax.bar([x + off for x in xs], [x / 1e4 for x in loss], w, bottom=[x / 1e4 for x in gain], color=cm)
+            n = sum(gain) + sum(loss)
+            tl += sum(loss)
+            tn += n
+            txt.append(f"{'男性' if sx == '男' else '女性'}：損 {sum(loss) / 1e4:,.0f}万人（{100 * sum(loss) / n:.0f}%）・得 {sum(gain) / 1e4:,.0f}万人")
+        ax.set_title(f"{cname}（報酬比例 −{s['cut'] * 100:.1f}%、一律給付 月{s['bi'] * 1e4:,.0f}円）：損する人 {tl / 1e4:,.0f}万人（{100 * tl / tn:.0f}%）",
+                     loc="left", fontsize=12)
+        ax.text(0.99, 0.95, "\n".join(txt) + f"\n分かれ目：報酬比例が月{_son(case, '男'):.1f}万円を超えると損",
+                transform=ax.transAxes, ha="right", va="top", fontsize=10.5, bbox=dict(boxstyle="round", fc="white", ec="#999"))
+        ax.legend(handles=[Patch(color="#2f5f9e", alpha=.35, label="男性・得"), Patch(color="#2f5f9e", label="男性・損"),
+                           Patch(color="#c0504d", alpha=.35, label="女性・得"), Patch(color="#c0504d", label="女性・損")],
+                  loc="upper left", ncol=2, fontsize=10)
+        ax.set_ylabel("受給権者数（万人）")
+        ax.set_ylim(0, 320)
+        axis(ax, j == 1)
+        if sedai:
+            _sedai_lines(ax, case, b)
+    fig.suptitle("厚生年金の国庫負担を廃止して国民全員に一律給付（財政均衡）：いまの受給者で損する人・得する人"
+                 + ("\n＋生まれた年度ごとの損得の分かれ目" if sedai else "") + "（非公式の推定）", fontsize=13.5)
+    note = ("非公式：厚生労働省の試算ではない。損得は2027年度からの一律給付と報酬比例のカットの、生涯の現在価値の差"
+            f"（2024年財政検証の計算プログラムに独自のレバーを加えた試算から推定。{REP}年度生まれの分かれ目を使う。個人単位、遺族年金は入れていない）。"
+            f"報酬比例＝年金月額−基礎年金（{b['B']:.2f}万円で一律とおいた推定）。国民年金だけの人は全員得。\n" + NOTE_SRC + "\n" + _note_suitei(b))
+    if sedai:
+        note += ("\n縦線：生まれた年度ごとの損得の分かれ目（年金月額）。線より右なら損。いまの受給者（1930〜1959年度生まれ）は 基礎年金"
+                 f"{b['B']:.2f}万円＋報酬比例の分かれ目。それより若い世代は、65歳になったときの基礎年金の満額＋報酬比例の分かれ目"
+                 "（2024年度の物価、得する人の割合.py と同じ。65歳までの一律給付を運用して足すので若いほど右へ動く）。"
+                 "棒グラフはいまの受給者の分布なので、若い世代の線は目安。")
+    G._note(fig, note)
+    fig.tight_layout(rect=(0, 0.1 if sedai else 0.085, 1, 0.96 if sedai else 0.97))
+    out = os.path.join(HERE, "図", "いまの受給者の損得" + ("_世代別の分かれ目" if sedai else "") + ".png")
+    fig.savefig(out, dpi=150, facecolor="white")
+    plt.close(fig)
+    print("書き出し:", out)
 
 
 # ---- 表 ----
@@ -301,7 +378,7 @@ def report():
     P = bunpu()["P"]
     for case, cname in CASES:
         s = sontoku(case)
-        th = [s["thr"][k] for k in s["thr"]]
+        th = [v for (c, _), v in s["thr"].items() if c < 1960]
         print(f"\n## {cname}（報酬比例 −{s['cut'] * 100:.1f}%、2027年度の一律給付 月{s['bi'] * 1e4:,.0f}円）")
         print(f"報酬比例の分かれ目：1930〜1959年度生まれで {min(th):.2f}〜{max(th):.2f}万円、"
               f"{REP}年度生まれ 男{_son(case, '男'):.2f}・女{_son(case, '女'):.2f}万円\n")
@@ -403,41 +480,8 @@ def graph():
     plt.close(fig)
     print("書き出し:", out)
 
-    # 図2：損する人・得する人
-    fig, axs = plt.subplots(2, 1, figsize=(14, 11.5), sharex=True)
-    for j, (ax, (case, cname)) in enumerate(zip(axs, CASES)):
-        s = sontoku(case)
-        txt = []
-        tl = tn = 0.0
-        for sx, off, cm in (("男", -w / 2, "#2f5f9e"), ("女", w / 2, "#c0504d")):
-            th = _son(case, sx)
-            gain = hist([p for p in P[sx] if p[2] <= th])[0]
-            loss = hist([p for p in P[sx] if p[2] > th])[0]
-            ax.bar([x + off for x in xs], [x / 1e4 for x in gain], w, color=cm, alpha=.35)
-            ax.bar([x + off for x in xs], [x / 1e4 for x in loss], w, bottom=[x / 1e4 for x in gain], color=cm)
-            n = sum(gain) + sum(loss)
-            tl += sum(loss)
-            tn += n
-            txt.append(f"{'男性' if sx == '男' else '女性'}：損 {sum(loss) / 1e4:,.0f}万人（{100 * sum(loss) / n:.0f}%）・得 {sum(gain) / 1e4:,.0f}万人")
-        ax.set_title(f"{cname}（報酬比例 −{s['cut'] * 100:.1f}%、一律給付 月{s['bi'] * 1e4:,.0f}円）：損する人 {tl / 1e4:,.0f}万人（{100 * tl / tn:.0f}%）",
-                     loc="left", fontsize=12)
-        ax.text(0.99, 0.95, "\n".join(txt) + f"\n分かれ目：報酬比例が月{_son(case, '男'):.1f}万円を超えると損",
-                transform=ax.transAxes, ha="right", va="top", fontsize=10.5, bbox=dict(boxstyle="round", fc="white", ec="#999"))
-        ax.legend(handles=[Patch(color="#2f5f9e", alpha=.35, label="男性・得"), Patch(color="#2f5f9e", label="男性・損"),
-                           Patch(color="#c0504d", alpha=.35, label="女性・得"), Patch(color="#c0504d", label="女性・損")],
-                  loc="upper left", ncol=2, fontsize=10)
-        ax.set_ylabel("受給権者数（万人）")
-        ax.set_ylim(0, 320)
-        axis(ax, j == 1)
-    fig.suptitle("厚生年金の国庫負担を廃止して国民全員に一律給付（財政均衡）：いまの受給者で損する人・得する人（非公式の推定）", fontsize=13.5)
-    G._note(fig, "非公式：厚生労働省の試算ではない。損得は2027年度からの一律給付と報酬比例のカットの、生涯の現在価値の差"
-            f"（2024年財政検証の計算プログラムに独自のレバーを加えた試算から推定。{REP}年度生まれの分かれ目を使う。個人単位、遺族年金は入れていない）。"
-            f"報酬比例＝年金月額−基礎年金（{b['B']:.2f}万円で一律とおいた推定）。国民年金だけの人は全員得。\n" + NOTE_SRC + "\n" + _note_suitei(b))
-    fig.tight_layout(rect=(0, 0.085, 1, 0.97))
-    out = os.path.join(HERE, "図", "いまの受給者の損得.png")
-    fig.savefig(out, dpi=150, facecolor="white")
-    plt.close(fig)
-    print("書き出し:", out)
+    for sedai in (False, True):
+        _graph_sontoku(G, plt, Patch, b, P, w, xs, axis, sedai)
 
     # 図3：報酬比例の一律カットで山がどう動くか（過去30年投影）
     case, cname = CASES[0]
