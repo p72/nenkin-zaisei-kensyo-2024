@@ -331,6 +331,70 @@ def _graph_sontoku(G, plt, Patch, b, P, w, xs, axis, sedai):
     print("書き出し:", out)
 
 
+SHORAI = (1969, 1979, 1989, 1999)
+
+
+def _graph_shorai(plt, P):
+    """その世代が65歳になったときの年金月額の分布（厚労省の分布推計）と、その世代の損得の分かれ目。
+    点線はいまの受給者の分布（同じ尺度：1万円あたりの割合）"""
+    import numpy as np
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+    T = _load("tokusuru", "得する人の割合.py")
+    E = T.EDGES
+    W = [hi - lo for lo, hi in zip(E[:-1], E[1:])]
+    D = T.bunpu()
+    col = {"男": "#2f5f9e", "女": "#c0504d"}
+    xx = np.linspace(0, E[-1], 1401)
+    fig, axs = plt.subplots(2, len(SHORAI), figsize=(20, 10.5), sharey=True)
+    for i, (case, cname) in enumerate(T.CASES):
+        r, cut = T.keisan(case)
+        for j, c in enumerate(SHORAI):
+            ax = axs[i][j]
+            for sx in ("男", "女"):
+                v = hist(P[sx])[0]
+                n = sum(v)
+                ax.step(list(range(N + 1)), [100 * x / n for x in v] + [100 * v[-1] / n], where="post",
+                        color=col[sx], lw=0.9, ls=":", alpha=.8)
+            for sx in ("男", "女"):
+                d = [100 * p / w for p, w in zip(D[case, c, sx], W)]
+                ax.step(list(E), d + [d[-1]], where="post", color=col[sx], lw=2)
+                thr = r[c][sx]["T"]
+                yy = np.array([d[min(np.searchsorted(E, x, side="right") - 1, len(d) - 1)] for x in xx])
+                ax.fill_between(xx, 0, yy, where=xx < thr, color=col[sx], alpha=.12)
+                ax.fill_between(xx, 0, yy, where=xx >= thr, color=col[sx], alpha=.38)
+                ax.axvline(thr, color=col[sx], lw=1.3, ls="--")
+            m, f = r[c]["男"], r[c]["女"]
+            ax.set_title(f"{c}年度生まれ（{c + 65}年度に65歳）", fontsize=11.5)
+            ax.text(0.97, 0.95, f"分かれ目 男{m['T']:.1f}万・女{f['T']:.1f}万円\n損する人 男{100 * (1 - m['share']):.0f}%・女{100 * (1 - f['share']):.0f}%"
+                    f"\n（男女計 {100 * (1 - r[c]['計']['share']):.0f}%）", transform=ax.transAxes, ha="right", va="top", fontsize=9.5,
+                    bbox=dict(boxstyle="round", fc="white", ec="#999"))
+            ax.set_xlim(0, E[-1])
+            ax.grid(axis="y", color="#ddd", lw=.6)
+            ax.spines[["top", "right"]].set_visible(False)
+            if j == 0:
+                ax.set_ylabel(f"{cname}（報酬比例 −{cut * 100:.1f}%）\n人の割合（%、1万円あたり）")
+            if i == 1:
+                ax.set_xlabel("65歳時点の年金月額（万円、2024年度の物価）")
+    fig.legend(handles=[Line2D([], [], color=col["男"], lw=2, label="男性：その世代が65歳になったときの分布（厚労省の分布推計）"),
+                        Line2D([], [], color=col["女"], lw=2, label="女性：同"),
+                        Patch(color="#555", alpha=.38, label="濃い色＝分かれ目（破線）より右：損"),
+                        Patch(color="#555", alpha=.12, label="薄い色＝左：得"),
+                        Line2D([], [], color="#555", lw=.9, ls=":", label="点線：いまの受給者の分布（参考・男女別）")],
+               loc="upper center", ncol=3, frameon=False, fontsize=10, bbox_to_anchor=(0.5, 0.955))
+    fig.suptitle("厚生年金の国庫負担を廃止して国民全員に一律給付（財政均衡）：その世代が65歳になったときの年金月額の分布と、"
+                 "損得の分かれ目（非公式の推定）", fontsize=13.5, y=0.99)
+    T.G._note(fig, "非公式：厚生労働省の試算ではない。分布は厚労省「年金額の分布推計」（2024年財政検証 関連資料。65歳時点の老齢年金月額、"
+              "物価で2024年度に割り戻し、7区分）。区分の中は一様、25万円以上は25〜35万円とした。縦の高さは区分の割合÷区分の幅（1万円あたり）。"
+              "分かれ目と損する人の割合は 得する人の割合.py と同じ（65歳時点の基礎年金の満額＋報酬比例の分かれ目）。"
+              "点線はいまの受給者（2025年3月末、共済を含む・一部推定）の分布で、同じ尺度にした。")
+    fig.tight_layout(rect=(0, 0.05, 1, 0.92))
+    out = os.path.join(HERE, "図", "いまの受給者の損得_65歳時点の分布.png")
+    fig.savefig(out, dpi=150, facecolor="white")
+    plt.close(fig)
+    print("書き出し:", out)
+
+
 # ---- 表 ----
 def report_bunpu():
     b = bunpu()
@@ -482,6 +546,7 @@ def graph():
 
     for sedai in (False, True):
         _graph_sontoku(G, plt, Patch, b, P, w, xs, axis, sedai)
+    _graph_shorai(plt, P)
 
     # 図3：報酬比例の一律カットで山がどう動くか（過去30年投影）
     case, cname = CASES[0]
