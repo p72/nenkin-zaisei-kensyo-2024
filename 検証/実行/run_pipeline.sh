@@ -62,6 +62,12 @@
 #                 基礎年金の水準が国民年金勘定から切り離される。
 #                 給付側は触らない（未納・免除期間が納付済期間に変わる分の
 #                 給付増は入らない）。SANGO/NIGO と同じパッチ・同じ流し方。
+#   ICHIGO_KYUFU 0/1  ICHIGO の給付側（思考実験）。1 なら③国民年金で、ICHIGO の年度以降の
+#                 第1号の納付状況を第3号と同じ「全部納付」にする（patches/ichigo-kyufu.patch）。
+#                 未納・免除の期間が納付済期間に変わり、給付も第3号並みになる。
+#                 ③の出力は nat/rslt-ichigo<年度>・nat/data-ichigo<年度> に分けて書き、④はそこを
+#                 読む（通常試算の③の出力は上書きしない）。ICHIGO と一緒に、③④⑤を流す
+#                 （例 STEPS=345 YOBI=602 ICHIGO=2027 ICHIGO_KYUFU=1）。
 #   KOKKO   0/西暦4桁  厚生年金への国庫負担の廃止の実施年度（思考実験）。
 #                 ⑤収支計算で、被用者年金4制度の「国庫負担」を実施年度以降
 #                 収入に入れない（patches/kokko-cut.patch）。基礎年金拠出金は
@@ -220,6 +226,7 @@ NIGO="${NIGO:-0}"
 SANGO_NOUFU="${SANGO_NOUFU:-1}"
 SANGO_MODE="${SANGO_MODE:-0}"
 ICHIGO="${ICHIGO:-0}"
+ICHIGO_KYUFU="${ICHIGO_KYUFU:-0}"
 KOKKO="${KOKKO:-0}"
 KOKKO_MODE="${KOKKO_MODE:-0}"
 RYUHO="${RYUHO:-0}"
@@ -254,6 +261,7 @@ chk ROUDR   "$ROUDR"   1 2 3
 chk SAIMU   "$SAIMU"   0 1 2
 chk SANGO_MODE "$SANGO_MODE" 0 1
 chk KOKKO_MODE "$KOKKO_MODE" 0 1
+chk ICHIGO_KYUFU "$ICHIGO_KYUFU" 0 1
 for v in SANGO NIGO ICHIGO KOKKO RYUHO ZEI; do
     eval "val=\$$v"
     case "$val" in
@@ -262,6 +270,10 @@ for v in SANGO NIGO ICHIGO KOKKO RYUHO ZEI; do
         *) die "$v の値が不正です: 「$val」（0 か 2020〜2120 の西暦4桁）" ;;
     esac
 done
+if [ "$ICHIGO_KYUFU" = 1 ]; then
+    [ "$ICHIGO" != 0 ] || die "ICHIGO_KYUFU=1 は ICHIGO（実施年度）と一緒に指定してください"
+    case "$STEPS" in *3*4*) ;; *) die "ICHIGO_KYUFU=1 のときは③と④を流してください（例 STEPS=345）" ;; esac
+fi
 if ! awk -v r="$SANGO_NOUFU" 'BEGIN{ exit !(r+0 > 0 && r+0 <= 1) }'; then
     die "SANGO_NOUFU の値が不正です: 「$SANGO_NOUFU」（0 より大きく 1 以下）"
 fi
@@ -366,6 +378,11 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
         cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/sango-haishi.patch"
     fi
 
+    if [ "$ICHIGO_KYUFU" = 1 ]; then
+        step "第1号の給付を第3号並みにするレバーを③国民年金に当てる（patches/ichigo-kyufu.patch）"
+        cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/ichigo-kyufu.patch"
+    fi
+
     if [ "$KOKKO" != 0 ] || [ "$RYUHO" != 0 ] || [ "$ZEI" != 0 ]; then
         step "厚生年金への国庫負担の廃止レバーを⑤収支計算に当てる（patches/kokko-cut.patch）"
         cd "$BUILD" && patch -p1 --no-backup-if-mismatch < "$HERE/patches/kokko-cut.patch"
@@ -417,6 +434,14 @@ for rel in nat/io_file/infile.csv nat/io_file/outfile.csv \
         cp "$DATA/$rel" "$SUURI/$rel"
     fi
 done
+
+# ICHIGO_KYUFU は③の出力を通常試算と別の場所に書き、④はそこを読む
+if [ "$ICHIGO_KYUFU" = 1 ]; then
+    NAT_TAG="ichigo$ICHIGO"
+    sed -i -e "s|/nat/rslt,|/nat/rslt-$NAT_TAG,|" -e "s|/nat/data,|/nat/data-$NAT_TAG,|" "$SUURI/nat/io_file/outfile.csv"
+    sed -i -e "s|/nat/data,|/nat/data-$NAT_TAG,|" "$SUURI/bas/io_file/infile.csv"
+    mkdir -p "$SUURI/nat/rslt-$NAT_TAG" "$SUURI/nat/data-$NAT_TAG"
+fi
 
 mkdir -p "$SUURI"/{nat,bas,emp,bunpu,wakuc}/{exec,rslt,log}
 mkdir -p "$SUURI"/nat/data "$SUURI"/bas/{data,settei}
@@ -486,10 +511,22 @@ fi
 
 if run_step 3; then
 step "③ 国民年金 を実行"
+natlog=/dev/null
+if [ "$ICHIGO_KYUFU" = 1 ]; then
+    export ICHIGO_KYUFU="$ICHIGO"
+    natlog="$SUURI/nat/log/nat-$SHISAN-$ECON-$WAKU-ichigo$ICHIGO.log"
+else
+    unset ICHIGO_KYUFU
+fi
 cd "$SUURI/nat" && "$SUURI/nat/exec/ver0000.out" \
     "$SUURI/nat/io_file/infile.csv" "$SUURI/nat/io_file/outfile.csv" \
     "$SHISAN" "$ECON" "$WAKU" "$BIRTHFILE" "$DEATH" "$SAIMU" 1 "$KAKUDAI" 2027 0 2031 3 "$WAKU" \
-    > /dev/null
+    > "$natlog"
+# パッチの当たっていない③に環境変数だけ渡すと黙って通常試算になるので止める
+if [ "$natlog" != /dev/null ] && ! grep -q "第1号の給付を第3号並みに" "$natlog"; then
+    die "ICHIGO_KYUFU=1 を指定しましたが③にレバーが効いていません（ビルドにパッチが当たっていない）。SKIP_BUILD を外してください"
+fi
+[ "$natlog" != /dev/null ] && ICHIGO_KYUFU=1
 fi
 
 # ④ 基礎年金（引数17個。順番は原本の jikko_bas.sh と cntl.c:28-60）
@@ -627,6 +664,9 @@ if [ "$SANGO" != 0 ] || [ "$NIGO" != 0 ]; then
 fi
 if [ "$ICHIGO" != 0 ]; then
     echo "  追加   第1号の第3号登録 $ICHIGO 年度（原本にないレバー・思考実験）"
+    if [ "$ICHIGO_KYUFU" = 1 ]; then
+        echo "         給付も第3号並み（③の出力は nat/rslt-ichigo$ICHIGO・nat/data-ichigo$ICHIGO）"
+    fi
 fi
 if [ "$KOKKO" != 0 ]; then
     echo "  追加   厚生年金への国庫負担の廃止 $KOKKO 年度・調整方法 $KOKKO_MODE（原本にないレバー・思考実験）"

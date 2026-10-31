@@ -7,12 +7,17 @@
   ・第1号被保険者数（未納・免除を含む頭数）を厚生年金の第3号の算定対象者に足す
   ・給付側は動かさない
 とした試算（予備番号 601）を、現行制度（000）と比べる。
+さらに ICHIGO_KYUFU=1（検証/実行/patches/ichigo-kyufu.patch）で、③国民年金の第1号の納付状況を
+実施年度以降は第3号と同じ「全部納付」にした試算（予備番号 602。給付も第3号並み）を 601 と比べる。
 
 使い方（リポジトリの直下で）
   検証/実行/run_pipeline.sh 3003 1 1 0 2 && 検証/実行/run_pipeline.sh 3002 && 検証/実行/run_pipeline.sh 3001
   STEPS=45 YOBI=601 ICHIGO=2027 検証/実行/run_pipeline.sh 3003 1 1 0 2
   SKIP_BUILD=1 STEPS=45 YOBI=601 ICHIGO=2027 検証/実行/run_pipeline.sh 3002
   SKIP_BUILD=1 STEPS=45 YOBI=601 ICHIGO=2027 検証/実行/run_pipeline.sh 3001
+  STEPS=345 YOBI=602 ICHIGO=2027 ICHIGO_KYUFU=1 検証/実行/run_pipeline.sh 3003 1 1 0 2
+  SKIP_BUILD=1 STEPS=345 YOBI=602 ICHIGO=2027 ICHIGO_KYUFU=1 検証/実行/run_pipeline.sh 3002
+  SKIP_BUILD=1 STEPS=345 YOBI=602 ICHIGO=2027 ICHIGO_KYUFU=1 検証/実行/run_pipeline.sh 3001
   python3 勉強/応用編/第1号を全員第3号にしたら.py
 財政見通し対照表（図）は python3 検証/3号廃止/make_taishohyo.py --case 3003 --yobi 601 など。
 """
@@ -44,9 +49,10 @@ def cho(x):
 def main():
     R = {}
     for case, _ in CASES:
-        R[case] = {y: (A.load_run(SUURI, case, y, y), kekka(case, y)) for y in ("000", "601")}
-        if R[case]["601"][0] is None:
-            raise SystemExit(f"★ {case} の 601 の出力がない。使い方の手順で流すこと")
+        R[case] = {y: (A.load_run(SUURI, case, y, y), kekka(case, y)) for y in ("000", "601", "602")}
+        for y in ("601", "602"):
+            if R[case][y][0] is None:
+                raise SystemExit(f"★ {case} の {y} の出力がない。使い方の手順で流すこと")
 
     print("## 所得代替率（給付水準の調整が終わったあと）\n")
     print("| | 現行制度 | 第1号を全員第3号に | 差 |")
@@ -103,6 +109,29 @@ def main():
             b, x = R[case]["000"][0], R[case]["601"][0]
             print(f"| {cname} | {y} | {b['model_total'][y] / 1e4:.1f}万円（{b['model_kiso'][y] / 1e4:.1f}／{b['model_hirei'][y] / 1e4:.1f}） | "
                   f"{x['model_total'][y] / 1e4:.1f}万円（{x['model_kiso'][y] / 1e4:.1f}／{x['model_hirei'][y] / 1e4:.1f}） |")
+
+    print("\n## 給付も第3号並みにしたら（602）— 保険料だけ第3号並み（601）とのくらべ\n")
+    print("| | 所得代替率：601 → 602 | 比例の調整終了 | 厚生年金の積立度合（2120年度） |")
+    print("|---|---|---|---|")
+    for case, cname in CASES:
+        a, c = R[case]["601"][0], R[case]["602"][0]
+        ta, ha, ka = a["final_rr"]
+        tc, hc, kc = c["final_rr"]
+        da = a["kou_tumitate"][2119] / a["kou_out"][2120]
+        dc = c["kou_tumitate"][2119] / c["kou_out"][2120]
+        print(f"| {cname} | {ta:.1f}%（比例 {ha:.1f}） → **{tc:.1f}%**（比例 **{hc:.1f}**） | {a['hirei_end']} → {c['hirei_end']}年度 | {da:.1f} → {dc:.1f} |")
+    print("\n| 兆円・名目 | 年度 | 基礎年金の費用（拠出金の合計） | 厚生年金（4制度計）の拠出金 | 特別国庫負担 | 国庫負担（基礎年金＋特別国庫） |")
+    print("|---|---|---|---|---|---|")
+    for case, cname in CASES:
+        for y in (2040, 2060, 2100):
+            cell = []
+            for k in ("601", "602"):
+                r, kk = R[case][k]
+                cell.append((cho(r["kyo_total"][y]), cho(r["kyo_total"][y] - r["kn_kyoshutu"][y]),
+                             cho(kk[y]["国庫（特別国庫）"]), cho(r["kokko_total"][y] + kk[y]["国庫（特別国庫）"])))
+            a, c = cell
+            print(f"| {cname} | {y} | {a[0]:.1f} → **{c[0]:.1f}**（{c[0] - a[0]:+.1f}） | {a[1]:.1f} → {c[1]:.1f} | "
+                  f"{a[2]:.1f} → {c[2]:.1f} | {a[3]:.1f} → {c[3]:.1f}（{c[3] - a[3]:+.1f}） |")
 
 
 if __name__ == "__main__":
