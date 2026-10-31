@@ -1,0 +1,42 @@
+diff -ruN "a/\345\233\275\346\260\221\345\271\264\351\207\221/noufuritu.c" "b/\345\233\275\346\260\221\345\271\264\351\207\221/noufuritu.c"
+--- "a/\345\233\275\346\260\221\345\271\264\351\207\221/noufuritu.c"	2026-10-31 02:41:29.511403267 +0000
++++ "b/\345\233\275\346\260\221\345\271\264\351\207\221/noufuritu.c"	2026-10-31 02:41:29.523817637 +0000
+@@ -568,6 +568,38 @@
+ 
+ 	}
+ 
++	/* ICHIGO_KYUFU（原本にないレバー・思考実験。検証/実行/patches/ichigo-kyufu.patch）
++	   実施年度以降、第1号の納付状況を第3号と同じ「全部納付」にする（noufuritu_3gou_cal と同じ式）。
++	   未納・免除の期間が納付済期間に変わり、給付も第3号並みになる。付加年金も納めない。
++	   ④の ICHIGO（第1号を第3号として登録）と組にして使う */
++	{
++		const char *ichigo_kyufu_env = getenv( "ICHIGO_KYUFU" );
++		int ichigo_kyufu = ( ichigo_kyufu_env != NULL ) ? atoi( ichigo_kyufu_env ) : 0;
++		int max_3gou_nenrei;
++
++		if( ichigo_kyufu > 0 )
++		{
++			for( seibetu = OTOKO ; seibetu <= ONNA ; seibetu++ )
++			{
++				shubetu = seibetu_to_shubetu_1gou( seibetu );
++				for( nendo = ichigo_kyufu ; nendo <= SAISHUNENDO ; nendo++ )
++				{
++					max_3gou_nenrei = 60 + encho_year( nendo );
++					for( nenrei = MIN_HIHO_NENREI ; nenrei <= MAX_HIHO_NENREI ; nenrei++ )
++					{
++						for( menjo_jokyo = SUM ; menjo_jokyo < MENJO_JOKYO ; menjo_jokyo++ )
++						{
++							Noufuritu[shubetu][nendo - SHONENDO][nenrei - MIN_HIHO_NENREI][menjo_jokyo]
++							= ( nenrei <= max_3gou_nenrei && menjo_jokyo == NOUFU ) ? 1. : 0.;
++						}
++						Noufuritu_Fuka[shubetu][nendo - SHONENDO][nenrei - MIN_HIHO_NENREI] = 0.;
++					}
++				}
++			}
++			printf( "第1号の給付を第3号並みに: %d年度\n" , ichigo_kyufu );
++		}
++	}
++
+ 	bunpu_data_out( fp_out[BUNPU] , Noufuritu , Noufuritu_Fuka );
+ 
+ 
