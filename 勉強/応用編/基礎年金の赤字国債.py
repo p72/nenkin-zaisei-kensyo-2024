@@ -14,6 +14,10 @@
     実質経済成長率は財政検証の長期の前提を2025年度から一定とした
   - 感応度として、名目GDPを標準報酬総額に比例させた系列も出す（2060年以降の人口減少が効く）
 
+利払いだけ税で払う場合
+  - 元本は借り換えで残し、その年度の利払い（前年度末の元本 × 金利）だけを税でまかなう。残高は元本のまま
+  - 金利は「名目成長率と同じ」「年金の運用利回り（名目）と同じ」の2通り
+
 使い方（リポジトリの直下で。通常試算3001〜3003と、税方式7万円.py run の901が要る）
   python3 勉強/応用編/基礎年金の赤字国債.py report   # 表
   python3 勉強/応用編/基礎年金の赤字国債.py graph    # 図（勉強/応用編/図/）
@@ -60,21 +64,24 @@ def keisan(case):
     G = gdp(case)
     GW = {y: GDP_2024 * W[y] / W[2024] for y in range(2024, 2121)}
     Dc = Z.discount(case)
-    b0 = bg = br = pv = pvh = 0.0
+    b0 = bg = br = pv = pvh = pv_tg = pv_tr = 0.0
     out = {}
     for y in range(START, 2121):
         D = run["kyo_total"][y] - run["kokko_total"][y]
         g = G[y] / G[y - 1] - 1
         r = (1 + econ[y][1] / 100) * (1 + econ[y][6] / 100) - 1   # 名目運用利回り
         bg_ri, br_ri = bg * g, br * r                                 # その年度の利払い
+        tax_g, tax_r = b0 * g, b0 * r              # 利払いだけ税で払うときの税（元本だけの残高に金利）
+        pv_tg += tax_g * Dc[y]
+        pv_tr += tax_r * Dc[y]
         b0, bg, br = b0 + D, bg + bg_ri + D, br + br_ri + D
         pv += D * Dc[y]
         hoken = run["kn_hoken"][y] + (d * W[y] * 1e12 if d is not None else float("nan"))
         pvh += hoken * Dc[y]
         out[y] = dict(D=D, hoken=hoken, b0=b0, bg=bg, br=br, G=G[y], GW=GW[y], g=g, r=r,
-                      ri_g=bg_ri, ri_r=br_ri)
+                      ri_g=bg_ri, ri_r=br_ri, tax_g=tax_g, tax_r=tax_r)
     rate = {yb: co.read_rate(v, yb, Z.SH)[2120]["所得代替率"] for yb in ("000", "901") if d is not None or yb == "000"}
-    return dict(y=out, pv=pv, pvh=pvh, delta=d, rate=rate)
+    return dict(y=out, pv=pv, pvh=pvh, delta=d, rate=rate, pv_tg=pv_tg, pv_tr=pv_tr)
 
 
 def report():
@@ -103,6 +110,19 @@ def report():
         print(f"- 2120年度の利払い: 金利＝名目成長率 {x['ri_g'] / 1e12:.1f}兆円、金利＝運用利回り {x['ri_r'] / 1e12:.1f}兆円"
               f"（発行額 {x['D'] / 1e12:.1f}兆円）")
         print(f"- 2120年度の名目GDP: {x['G'] / 1e12:,.0f}兆円")
+        print()
+        print("利払いだけ税で払う場合（元本は借り換え、利払い＝前年度末の元本×金利を税で）")
+        print()
+        print("| 年度 | 元本の残高（GDP比） | 税：金利＝名目成長率 | 対GDP | 今の経済規模なら | 税：金利＝運用利回り | 対GDP | 今の経済規模なら |")
+        print("|---|---|---|---|---|---|---|---|")
+        for y in YEARS[1:]:
+            x = o[y]
+            print(f"| {y} | {x['b0'] / 1e12:,.0f}兆円（{x['b0'] / x['G'] * 100:.0f}%） | {x['tax_g'] / 1e12:,.1f}兆円 | "
+                  f"{x['tax_g'] / x['G'] * 100:.2f}% | 約{x['tax_g'] / x['G'] * GDP_2024 / 1e12:.1f}兆円 | "
+                  f"{x['tax_r'] / 1e12:,.1f}兆円 | {x['tax_r'] / x['G'] * 100:.2f}% | 約{x['tax_r'] / x['G'] * GDP_2024 / 1e12:.1f}兆円 |")
+        print()
+        print(f"- 利払いの税の現在価値（2027〜2120年度）: 金利＝名目成長率 {k['pv_tg'] / 1e12:.0f}兆円、"
+              f"金利＝運用利回り {k['pv_tr'] / 1e12:.0f}兆円（発行額の現在価値 {k['pv'] / 1e12:.0f}兆円）")
         print()
 
 
