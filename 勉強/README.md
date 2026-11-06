@@ -1,5 +1,9 @@
 # 勉強 — 厚労省のC/C++コードから年金制度を学ぶ
 
+- このページ（GitHub）：<https://github.com/p72/nenkin-zaisei-kensyo-2024/tree/main/%E5%8B%89%E5%BC%B7>
+- このページ（Web・GitHub Pages）：<https://p72.github.io/nenkin-zaisei-kensyo-2024/%E5%8B%89%E5%BC%B7/>
+- リポジトリ：<https://github.com/p72/nenkin-zaisei-kensyo-2024>
+
 2024年財政検証で厚生労働省が公表した計算プログラム（C/C++ 38,208行）を読みながら、
 **年金制度の仕組みを、コードの1行1行で確かめて学ぶ**ための解説集。
 
