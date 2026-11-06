@@ -1,5 +1,9 @@
 # 第3号被保険者に保険料を求めたら年金に何が起こるか — 財政検証プログラムで計算する
 
+- このページ（GitHub）：<https://github.com/p72/nenkin-zaisei-kensyo-2024/tree/main/%E6%A4%9C%E8%A8%BC/3%E5%8F%B7%E5%BB%83%E6%AD%A2>
+- このページ（Web・GitHub Pages）：<https://p72.github.io/nenkin-zaisei-kensyo-2024/%E6%A4%9C%E8%A8%BC/3%E5%8F%B7%E5%BB%83%E6%AD%A2/>
+- リポジトリ：<https://github.com/p72/nenkin-zaisei-kensyo-2024>
+
 > **これは厚生労働省の試算ではありません。** 公表された2024年財政検証プログラムに、
 > 原本にないレバー（号別被保険者の廃止）を約70行のパッチで足して、このリポジトリが
 > 独自に計算したものです。①〜③（人口・被保険者・厚生年金給付・国民年金給付）は

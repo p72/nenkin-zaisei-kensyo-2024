@@ -265,6 +265,9 @@ def main():
     out = []
     w = out.append
     w("# 第3号被保険者の廃止（第1号への振替・全員納付）— 計算結果\n")
+    w("- この記事（GitHub）：<https://github.com/p72/nenkin-zaisei-kensyo-2024/blob/main/%E6%A4%9C%E8%A8%BC/3%E5%8F%B7%E5%BB%83%E6%AD%A2/%E7%B5%90%E6%9E%9C.md>\n"
+      "- この記事（Web・GitHub Pages）：<https://p72.github.io/nenkin-zaisei-kensyo-2024/%E6%A4%9C%E8%A8%BC/3%E5%8F%B7%E5%BB%83%E6%AD%A2/%E7%B5%90%E6%9E%9C.html>\n"
+      "- リポジトリ：<https://github.com/p72/nenkin-zaisei-kensyo-2024>\n")
     w(f"実施年度 {args.year}年度。①〜③は通常試算のまま、④基礎年金と⑤収支計算だけを流し直した"
       "（`検証/3号廃止/run_sango.sh`）。数値は `analyze_sango.py` が出力ファイルから拾ったもので、"
       "手で書き写した数字はない。\n")
