@@ -69,14 +69,18 @@ def main():
               "標準報酬は2027年度の額を保険料改定率で延ばした\n")
         sh = kb["収支見通し"]
         k0 = row(sh, YEARS[0])["保険料改定率"]
-        print("| 年度 | 実負担 | 第1号の保険料（実効） | 差 | " + " | ".join(f"第2号 標準報酬{w / 1e4:.1f}万円 | 差" for w in HYOJUN) + " |")
-        print("|---|---|---|---|" + "---|---|" * len(HYOJUN))
+        print("| 年度 | 実負担 | 第1号の保険料（実効） | 差 | 第3号 | 差 | " + " | ".join(f"第2号 標準報酬{w / 1e4:.1f}万円 | 差" for w in HYOJUN)
+              + " | 被用者年金の平均（保険料総額÷第2号・第3号の頭数） | 差 | 実負担と釣り合う標準報酬 | 同・2027年度の賃金水準に直すと |")
+        print("|---|---|---|---|---|---|" + "---|---|" * len(HYOJUN) + "---|---|---|---|")
         for y in YEARS:
             jf = r["tanka"][y] - r["tanka_kokko"][y]
             ich = r["kn_hoken"][y] / (r["santei_1go"][y] * 12)
             sc = row(sh, y)["保険料改定率"] / k0
             cells = [f"{w * sc * RITU:,.0f}円 | {w * sc * RITU - jf:+,.0f}円" for w in HYOJUN]
-            print(f"| {y} | {jf:,.0f}円 | {ich:,.0f}円 | {ich - jf:+,.0f}円 | " + " | ".join(cells) + " |")
+            hy = r["santei_total"][y] - r["santei_1go"][y]
+            ave = r["kou_hoken"][y] * 1e8 / (hy * 12)
+            print(f"| {y} | {jf:,.0f}円 | {ich:,.0f}円 | {ich - jf:+,.0f}円 | 0円 | {-jf:+,.0f}円 | " + " | ".join(cells)
+                  + f" | {ave:,.0f}円 | {ave - jf:+,.0f}円 | {jf / RITU:,.0f}円 | {jf / RITU / sc:,.0f}円 |")
         y = YEARS[0]
         jf = r["tanka"][y] - r["tanka_kokko"][y]
         print(f"\n- 基礎年金の実負担と釣り合う標準報酬月額（{y}年度）：{jf / RITU:,.0f}円（賞与なし、報酬比例の分は入れない）\n")
