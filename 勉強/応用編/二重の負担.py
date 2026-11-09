@@ -334,6 +334,139 @@ def zu(res):
     print("書き出し:", out)
 
 
+# 制度別（公表：第3-7-47図・第3-7-48図の「厚生年金、国民年金別」、兆円・10兆円単位）
+KOHYO_SEIDO = {
+    "3003": dict(K=dict(hoken=1470, tumi=290, kokko=420, kokko_p=270, kokko_f=140, kyu_p=1190, kyu_f=970,
+                        kiso_p=550, kiso_f=290),
+                 N=dict(hoken=40, tumi=10, kokko=80, kokko_p=50, kokko_f=30, kyu_p=80, kyu_f=50)),
+    "3002": dict(K=dict(hoken=1540, tumi=160, kokko=440, kokko_p=270, kokko_f=170, kyu_p=1140, kyu_f=1000,
+                        kiso_p=540, kiso_f=340),
+                 N=dict(hoken=30, tumi=10, kokko=70, kokko_p=40, kokko_f=30, kyu_p=70, kyu_f=50)),
+}
+
+
+def seido(case, o):
+    """財源と給付を、期間（過去・将来）と制度（被用者年金・国民年金）に分ける。
+    基礎年金は「誰が払うか」（被用者年金4制度の基礎年金拠出金／国民年金の拠出金と特別国庫負担）で分ける。
+    公表の「厚生年金、国民年金別」と同じ分け方。保険料は制度ごとに
+      過去期間分 ＝ 過去期間の給付 − 過去期間分の国庫負担 − 2024年度末の積立金
+      将来期間分 ＝ 将来期間の給付 − 将来期間分の国庫負担
+    で割り振る（2120年度末に残る積立金の現在価値の分だけ、保険料の合計とずれる）。"""
+    b0 = load(case, "")
+    mid, end = factors(b0["rate"])
+    r = {}
+    for pre in ("", "AK"):
+        d = load(case, pre)
+        tag = "09" if pre else "08"
+        S = A.read_blocks(os.path.join(SUURI, "emp", "rslt", "ez_arev", "shushi",
+                                       f"03summary.{pre}{case}-{case}-{case}-{case}-1120-000_{tag}sum.csv"))
+        t = S["収支[全厚年１:tou]"]
+        kokK = pv(scale(A.series(t, "国庫負担", 2000), 1e-4), mid)
+        r[pre] = dict(kyoK=pv(scale(A.series(t, "基礎年金拠出金", 2000), 1e-4), mid), kokK=kokK,
+                      kokN=pv(d["kokko"], mid) - kokK, kn2=pv(d["kn2"], mid))
+        if not pre:
+            kek = A.read_blocks(os.path.join(SUURI, "bas", "rslt", f"kekka{case}-{case}-{case}-{case}-1120-000a.csv"))
+            hokK = pv(scale(A.series(t, "保険料", 2000), 1e-4), mid)
+            tK = scale(A.series(t, "積立金", 2000), 1e-4)
+            tN = scale(A.series(kek["収支見通し"], "年度末積立金"), 1e-12)
+            r[pre].update(hokK=hokK, hokN=pv(d["hoken"], mid) - hokK, t24K=tK[Y0], t24N=tN[Y0],
+                          t120K=tK[Y1] / end[Y1], t120N=tN[Y1] / end[Y1])
+    a, f = r["AK"], r[""]
+    z = dict(kiso_pK=a["kyoK"], kiso_pN=o["kakok"] - a["kyoK"], kiso_fK=f["kyoK"] - a["kyoK"],
+             kiso_fN=o["shoraik"] - (f["kyoK"] - a["kyoK"]),
+             kn2_p=a["kn2"], kn2_f=f["kn2"] - a["kn2"],
+             kokK_p=a["kokK"], kokN_p=a["kokN"], kokK_f=f["kokK"] - a["kokK"], kokN_f=f["kokN"] - a["kokN"],
+             t24K=f["t24K"], t24N=f["t24N"], t120K=f["t120K"], t120N=f["t120N"], hokK=f["hokK"], hokN=f["hokN"])
+    z["kyuK_p"] = o["kako2"] - z["kn2_p"] + z["kiso_pK"]
+    z["kyuN_p"] = z["kn2_p"] + z["kiso_pN"]
+    z["kyuK_f"] = o["shorai2"] - z["kn2_f"] + z["kiso_fK"]
+    z["kyuN_f"] = z["kn2_f"] + z["kiso_fN"]
+    z["hokK_p"] = z["kyuK_p"] - z["kokK_p"] - z["t24K"]
+    z["hokN_p"] = z["kyuN_p"] - z["kokN_p"] - z["t24N"]
+    z["hokK_f"] = z["kyuK_f"] - z["kokK_f"]
+    z["hokN_f"] = z["kyuN_f"] - z["kokN_f"]
+    return z
+
+
+def zu_seido(res):
+    """期間・制度型のバランスシート（ケースごとに1枚）。斜線が国民年金の分"""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.rcParams["font.family"] = "IPAPGothic"
+    plt.rcParams["axes.unicode_minus"] = False
+    col = dict(tumi=C_TUMI, kok_p=C_KOKKO, kok_f=C_KOKKO2, hok_p=C_NIJUU, hok_f=C_HOKEN2,
+               kiso_p="#1f5fae", nikai_p="#7fb1e8", kiso_f="#5a8f8f", nikai_f="#b5d6d6")
+    dark = {C_TUMI, C_KOKKO, C_NIJUU, "#1f5fae", "#5a8f8f"}
+    files = {"3003": "二重の負担_バランスシート_期間と制度.png", "3002": "二重の負担_バランスシート_期間と制度_成長型.png"}
+    for case, name in CASES:
+        if case not in res or case not in files:
+            continue
+        o = res[case]
+        z = o["seido"]
+        w, X0, X1 = 0.8, 0.0, 1.35
+        fig, ax = plt.subplots(figsize=(12.5, 9.2))
+        zai = [(z["t24K"], col["tumi"], "積立金（2024年度末）\n被用者年金", None),
+               (z["t24N"], col["tumi"], "積立金・国民年金", "//"),
+               (z["kokK_p"], col["kok_p"], "国庫負担（過去期間分）\n被用者年金へ", None),
+               (z["kokN_p"], col["kok_p"], "国庫負担（過去期間分）・国民年金へ", "//"),
+               (z["hokK_p"], col["hok_p"], "保険料（過去期間分）\n被用者年金", None),
+               (z["hokN_p"], col["hok_p"], "保険料（過去期間分）・国民年金", "//"),
+               (z["kokK_f"], col["kok_f"], "国庫負担（将来期間分）・被用者年金へ", None),
+               (z["kokN_f"], col["kok_f"], "国庫負担（将来期間分）・国民年金へ", "//"),
+               (z["hokK_f"], col["hok_f"], "保険料（将来期間分）\n被用者年金", None),
+               (z["hokN_f"], col["hok_f"], "保険料（将来期間分）・国民年金", "//")]
+        kyu = [(z["kiso_pK"], col["kiso_p"], "過去期間・基礎年金\n被用者年金が払う分", None),
+               (z["kiso_pN"], col["kiso_p"], "過去期間・基礎年金・国民年金が払う分", "//"),
+               (o["kako2"], col["nikai_p"], "過去期間・2階部分", None),
+               (z["kiso_fK"], col["kiso_f"], "将来期間・基礎年金\n被用者年金が払う分", None),
+               (z["kiso_fN"], col["kiso_f"], "将来期間・基礎年金・国民年金が払う分", "//"),
+               (o["shorai2"], col["nikai_f"], "将来期間・2階部分", None)]
+        for x, segs, side in ((X0, zai, "left"), (X1, kyu, "right")):
+            b = 0.0
+            for v, c, lab, h in segs:
+                ax.bar(x, v, w, bottom=b, color=c, edgecolor="white", lw=1.2, hatch=h)
+                if v > 170 and h is None:
+                    ax.text(x, b + v / 2, f"{lab}\n{v:,.0f}", ha="center", va="center", fontsize=9.5,
+                            color="white" if c in dark else INK, linespacing=1.3)
+                else:
+                    t = f"{lab.replace(chr(10), '・')} {v:,.0f}"
+                    if side == "left":
+                        ax.text(x - w / 2 - 0.03, b + v / 2, t, ha="right", va="center", fontsize=8.6, color=INK)
+                    else:
+                        ax.text(x + w / 2 + 0.03, b + v / 2, t, ha="left", va="center", fontsize=8.6, color=INK)
+                b += v
+            ax.annotate(f"合計 {b:,.0f}", (x, b), xytext=(0, 5), textcoords="offset points", ha="center", fontsize=11)
+        ax.plot([X0 - w / 2 - 0.05, X1 + w / 2 + 0.05], [o["kako"]] * 2, color=INK, lw=1.1, ls="--")
+        ax.text(X1 + w / 2 + 0.08, o["kako"], "↑ 将来期間\n↓ 過去期間", ha="left", va="center", fontsize=9.5, color=INK)
+        ax.set_xticks([X0, X1])
+        ax.set_xticklabels(["財源", "給付"], fontsize=12)
+        ax.set_xlim(-1.75, 2.95)
+        ax.set_ylim(0, 2450)
+        ax.set_ylabel("兆円（2024年度末の価値、2025〜2120年度の合計）")
+        ax.grid(axis="y", color=GRID, lw=0.6)
+        ax.set_axisbelow(True)
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.set_title(f"公的年金のバランスシート（期間・制度型） — {name}ケース（非公式の再現）\n"
+                     "財源と給付を、期間（過去・将来）と制度（被用者年金・国民年金）に分けると。斜線が国民年金の分",
+                     fontsize=12.5)
+        rem = z["t120K"] + z["t120N"]
+        fig.text(0.01, 0.008,
+                 "非公式：2024年財政検証の計算プログラムの出力（通常試算・過去分試算）を名目運用利回りで2024年度末の価値に直した再現。"
+                 "厚生労働省の計算そのものではない。\n"
+                 "基礎年金は「誰が払うか」で分けた（被用者年金＝厚生年金・共済の基礎年金拠出金、国民年金＝国民年金の拠出金と特別国庫負担）。"
+                 "公表の「厚生年金、国民年金別」と同じ分け方。\n"
+                 "保険料（過去期間分）は保険料のうち過去期間の給付に回る分で、制度ごとに 過去期間の給付 − 過去期間分の国庫負担 − 2024年度末の積立金。\n"
+                 f"保険料（将来期間分）は 将来期間の給付 − 将来期間分の国庫負担。2120年度末に残る積立金の現在価値（{rem:,.0f}兆円）の分だけ"
+                 "保険料の合計とずれる。2階部分には国民年金の付加年金など（1兆円ほど）を含む。",
+                 fontsize=7.8, color=INK2, linespacing=1.5)
+        fig.tight_layout(rect=(0, 0.085, 1, 1))
+        out = os.path.join(HERE, "図", files[case])
+        fig.savefig(out, dpi=150, facecolor="white")
+        plt.close(fig)
+        print("書き出し:", out)
+
+
 def main():
     res = {}
     ok = False
@@ -373,6 +506,25 @@ def main():
         print(f"\n検算：{f0(o['kako'])} − {f0(o['kokko_kako'])} − {f0(o['tumi24'])} ＝ {f0(o['nijuu'])}"
               f"（報酬比例 {f0(o['nijuu_hirei'])} ＋ 基礎年金 {f0(o['nijuu_kiso'])}）")
         print(f"財源の合計 {f0(o['hoken'] + o['kokko'] + o['tumi'])} ／ 給付の合計 {f0(o['kyufu'])}")
+        z = o["seido"] = seido(case, o)
+        ks = KOHYO_SEIDO.get(case)
+        kv = lambda s_, k: f"{ks[s_][k]:,}" if ks and k in ks[s_] else "―"     # noqa: E731
+        print(f"\n制度別（期間・制度型のバランスシート）\n")
+        print("| 兆円 | 被用者年金 | 公表 | 国民年金 | 公表 |")
+        print("|---|---|---|---|---|")
+        for lab, kK, kN, pk in (("保険料", "hokK", "hokN", "hoken"),
+                                ("国庫負担：過去期間分", "kokK_p", "kokN_p", "kokko_p"),
+                                ("国庫負担：将来期間分", "kokK_f", "kokN_f", "kokko_f"),
+                                ("給付：過去期間", "kyuK_p", "kyuN_p", "kyu_p"),
+                                ("　うち基礎年金", "kiso_pK", "kiso_pN", "kiso_p"),
+                                ("給付：将来期間", "kyuK_f", "kyuN_f", "kyu_f"),
+                                ("　うち基礎年金", "kiso_fK", "kiso_fN", "kiso_f"),
+                                ("保険料のうち過去期間の給付に回る分", "hokK_p", "hokN_p", None),
+                                ("保険料のうち将来期間の給付に回る分", "hokK_f", "hokN_f", None)):
+            print(f"| {lab} | {f0(z[kK])} | {kv('K', pk) if pk else '―'} | {f0(z[kN])} | "
+                  f"{kv('N', pk) if pk and pk != 'kiso_p' and pk != 'kiso_f' else '―'} |")
+        tK, tN = z["t24K"] - z["t120K"], z["t24N"] - z["t120N"]
+        print(f"| 積立金から得られる財源 | {f0(tK)} | {kv('K', 'tumi')} | {f0(tN)} | {kv('N', 'tumi')} |")
         if case in NENDO:
             print(f"\n年度ごと（兆円・名目）\n")
             print("| 年度 | 給付計 | 公表 | 過去期間に係る分 | 公表 | うち受給者分 | 公表 |")
@@ -384,6 +536,7 @@ def main():
         sys.exit(1)
     if "--no-fig" not in sys.argv:
         zu(res)
+        zu_seido(res)
 
 
 if __name__ == "__main__":
