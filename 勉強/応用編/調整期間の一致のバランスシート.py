@@ -59,12 +59,23 @@ def keisan(case):
         z["S_raw"] = S
         z["tumiK"] = z["kyuK"] + z["S"] - z["hokK"] - z["kokK"]     # 被用者年金の積立金からの財源（残り）
         z["hokN_f_disp"] = z["kyuN_f"] - z["kokN_f"] - z["S"]
+        # 被用者年金の給付を、基礎年金拠出金分と2階部分、いまの受給者・まだ受け取っていない人・将来期間に分ける
+        aj = N.load(case, "AJ", run)
+        z["kisoK"] = z["kiso_pK"] + z["kiso_fK"]
+        z["nikaiK"] = z["kyuK"] - z["kisoK"]
+        z["jukyuK"] = N.pv(aj["kou"]["kyo"], mid) + o["jukyu2"] - N.pv(aj["kn2"], mid)
+        z["madaK"] = z["kyuK_p"] - z["jukyuK"]
         out[k] = o
     return out
 
 
 def f0(x):
     return f"{x:,.0f}"
+
+
+def d0(x):
+    """差の表示（丸めて0なら ±0）"""
+    return "±0" if round(x) == 0 else f"{x:+,.0f}"
 
 
 def main():
@@ -104,6 +115,14 @@ def main():
         print(f"| 被用者年金の財源から国民年金の給付に回る分 | | | {zg['S_raw']:,.1f}（≒0） | {zt['S']:,.1f} |")
         print(f"| 国民年金の給付の割合 | | | {zg['kyuN'] / (zg['kyuK'] + zg['kyuN']) * 100:.1f}% | "
               f"{zt['kyuN'] / (zt['kyuK'] + zt['kyuN']) * 100:.1f}% |")
+        print("\n被用者年金だけ（兆円、2024年度末の価値）\n")
+        print("| 項目 | 現行制度 | 調整期間の一致 | 差 |")
+        print("|---|---|---|---|")
+        for lab, kk in (("給付の合計", "kyuK"), ("　基礎年金拠出金の分", "kisoK"), ("　2階部分", "nikaiK"),
+                        ("　いまの受給者の分", "jukyuK"), ("　まだ受け取っていない人の過去期間分", "madaK"),
+                        ("　将来期間分", "kyuK_f"), ("財源：保険料", "hokK"), ("財源：国庫負担", "kokK"),
+                        ("財源：積立金", "tumiK"), ("国民年金の給付へ回る分", "S")):
+            print(f"| {lab} | {f0(zg[kk])} | {f0(zt[kk])} | {d0(zt[kk] - zg[kk])} |")
         neg = [y for y in sorted(t["tumiN_nen"]) if y > Y0 and t["tumiN_nen"][y] < 0]
         print(f"国民年金勘定（④）の積立金がマイナスになる年度：{neg[0] if neg else 'なし'}　"
               f"2120年度末（現在価値）：国民年金 {t['tumiN_pv'][Y1]:,.1f}、厚生年金 {t['tumiK_pv'][Y1]:,.1f}")
@@ -112,6 +131,7 @@ def main():
         zu_seido(res)
         zu_size(res)
         zu_nijuu(res)
+        zu_hiyosha(res)
 
 
 # ---------------------------------------------------------------------------- 図
@@ -478,6 +498,61 @@ def zu_nijuu(res):
              "保険料（将来期間分）は 将来期間の給付 − 将来期間分の国庫負担。", fontsize=7.8, color=INK2, linespacing=1.5)
     fig.tight_layout(rect=(0, 0.07, 1, 0.95))
     _save(fig, "バランスシート_二重負担型")
+    plt.close(fig)
+
+
+
+def zu_hiyosha(res):
+    """被用者年金だけの増減：財源はどこから増え、給付は誰の分が増えるか（現行制度との差）"""
+    plt = _plt()
+    cases = [(c, n) for c, n in CASES if c in res]
+    fig, axs = plt.subplots(len(cases), 2, figsize=(15, 4.9 * len(cases)), squeeze=False, sharex=True)
+    RED = "#d9534f"
+    for i, (c, name) in enumerate(cases):
+        zg, zt = res[c]["gen"]["seido"], res[c]["tg"]["seido"]
+        dd = {k: zt[k] - zg[k] for k in ("kyuK", "hokK", "kokK", "tumiK", "S", "kisoK", "nikaiK",
+                                          "jukyuK", "madaK", "kyuK_f")}
+        left = [("財源：国庫負担", dd["kokK"], C["kokko"]), ("財源：保険料", dd["hokK"], C["hoken"]),
+                ("財源：積立金", dd["tumiK"], C["tumi"]), ("国民年金の給付へ回る分", -dd["S"], RED),
+                ("＝ 被用者年金の給付", dd["kyuK"], INK)]
+        right = [("基礎年金拠出金の分", dd["kisoK"], C["kiso"]), ("2階部分", dd["nikaiK"], C["kako2"]),
+                 ("いまの受給者の分", dd["jukyuK"], "#6c5aa8"),
+                 ("まだ受け取っていない人の\n過去期間分", dd["madaK"], "#9d8fd0"),
+                 ("将来期間分", dd["kyuK_f"], C["shoraik"]), ("＝ 被用者年金の給付", dd["kyuK"], INK)]
+        for ax, rows, title in ((axs[i][0], left, "財源はどこから増えるか"),
+                                (axs[i][1], right, "給付は何が・誰の分が増えるか")):
+            ys = list(range(len(rows)))[::-1]
+            for y, (lab, v, cc) in zip(ys, rows):
+                ax.barh(y, v, 0.6, color=cc, edgecolor="white", lw=1)
+                ax.annotate(d0(v), (v, y), xytext=(4 if v >= 0 else -4, 0), textcoords="offset points",
+                            ha="left" if v >= 0 else "right", va="center", fontsize=10, color=INK)
+            ax.set_yticks(ys)
+            ax.set_yticklabels([r[0] for r in rows], fontsize=9.5)
+            ax.axvline(0, color=INK, lw=0.8)
+            ax.axhline(0.5, color=INK2, lw=0.6, ls=":")
+            if ax is axs[i][1]:
+                ax.axhline(3.5, color=INK2, lw=0.6, ls=":")
+            ax.set_title(f"{name}ケース：{title}", fontsize=11.5, color=INK)
+            _style(ax, axis="x")
+        axs[i][0].text(0.99, 0.97, f"被用者年金の給付\n{zg['kyuK']:,.0f} → {zt['kyuK']:,.0f}兆円",
+                       transform=axs[i][0].transAxes, ha="right", va="top", fontsize=10, color=INK)
+    for ax in axs[-1]:
+        ax.set_xlabel("調整期間の一致 − 現行制度（兆円、2024年度末の価値）")
+    lo = min(ax.get_xlim()[0] for row in axs for ax in row)
+    hi = max(ax.get_xlim()[1] for row in axs for ax in row)
+    for row in axs:
+        for ax in row:
+            ax.set_xlim(lo * 1.25, hi * 1.15)
+    g0 = res[cases[0][0]]
+    zg, zt = g0["gen"]["seido"], g0["tg"]["seido"]
+    fig.suptitle(f"被用者年金だけを見ると — 給付は{zt['kyuK'] - zg['kyuK']:+,.0f}兆円。国民年金へ回る{zt['S']:,.0f}兆円より、"
+                 f"国庫負担の増え（{zt['kokK'] - zg['kokK']:+,.0f}）が大きい（{cases[0][1]}、非公式の推定）",
+                 fontsize=12.5, color=INK)
+    fig.text(0.01, 0.005, NOTE + "\n被用者年金の基礎年金は、厚生年金・共済が払う基礎年金拠出金の分。"
+             "いまの受給者の分は受給者分試算の基礎年金拠出金と2階部分（国民年金の独自給付を除く）。",
+             fontsize=7.8, color=INK2, linespacing=1.5)
+    fig.tight_layout(rect=(0, 0.075, 1, 0.95))
+    _save(fig, "被用者年金の増減")
     plt.close(fig)
 
 
