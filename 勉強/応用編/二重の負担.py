@@ -78,15 +78,26 @@ def scale(s, k):
     return {y: v * k for y, v in s.items()}
 
 
-def load(case, pre):
-    """pre: "" 通常試算 / "AK" 過去分試算 / "AJ" 受給者分試算。金額は兆円（名目）"""
-    c = case
+# 予備番号の組。sum＝⑤の要約、kek＝④の結果、saimu＝過去分試算・受給者分試算（④⑤とも）
+RUN_GENKOU = dict(sum="000", kek="000", saimu="000")
+# 調整期間の一致：④の2周目と統一カット率が 101。⑤は厚生年金と国民年金を一体で均衡させるので、
+# 通常試算の⑤の要約（全厚年１）には国民年金の分が合算されている（ichitai=True）。
+# 過去分試算・受給者分試算は Touitu=0 で流すので、厚生年金だけの要約になる
+RUN_TOUGOU = dict(sum="100", kek="101", saimu="101", ichitai=True)
+
+
+def files(case, pre, run=None):
+    """(④の結果, ⑤の要約) のファイル名"""
+    run, c = run or RUN_GENKOU, case
     if pre:
-        kek = f"kekka{pre}{c}-{c}{pre}-{c}-{c}-1120-000a.csv"
-        summ = f"03summary.{pre}{c}-{c}-{c}-{c}-1120-000_09sum.csv"
-    else:
-        kek = f"kekka{c}-{c}-{c}-{c}-1120-000a.csv"
-        summ = f"03summary.{c}-{c}-{c}-{c}-1120-000_08sum.csv"
+        y = run["saimu"]
+        return (f"kekka{pre}{c}-{c}{pre}-{c}-{c}-1120-{y}a.csv", f"03summary.{pre}{c}-{c}-{c}-{c}-1120-{y}_09sum.csv")
+    return (f"kekka{c}-{c}-{c}-{c}-1120-{run['kek']}a.csv", f"03summary.{c}-{c}-{c}-{c}-1120-{run['sum']}_08sum.csv")
+
+
+def load(case, pre, run=None):
+    """pre: "" 通常試算 / "AK" 過去分試算 / "AJ" 受給者分試算。金額は兆円（名目）"""
+    kek, summ = files(case, pre, run)
     pk = os.path.join(SUURI, "bas", "rslt", kek)
     ps = os.path.join(SUURI, "emp", "rslt", "ez_arev", "shushi", summ)
     if not (os.path.exists(pk) and os.path.exists(ps)):
@@ -96,18 +107,29 @@ def load(case, pre):
     sh = K["収支見通し"]                     # 国民年金勘定（円）
     _, rows = K["基礎年金給付費（新法＋旧法）"]  # 円。先頭の「制度計」を使う
     oku, en = 1e-4, 1e-12
+    T = lambda col: scale(A.series(tou, col, 2000), oku)       # noqa: E731
+    kn = dict(dok=scale(add(*[A.series(sh, k) for k in KN2]), en),
+              kokko=scale(add(*[A.series(sh, k) for k in KN_KOKKO]), en),
+              hoken=scale(add(*[A.series(sh, k) for k in KN_HOKEN]), en),
+              tumi=scale(A.series(sh, "年度末積立金"), en),
+              kyo=scale(add(A.series(sh, "基礎年金拠出金"), A.series(sh, "基礎年金拠出金（特別国庫）")), en))
+    ichitai = bool((run or {}).get("ichitai")) and not pre
+    if ichitai:   # ⑤の要約に国民年金が合算されている → 厚生年金だけは 要約 − 国民年金
+        kou = {k: {y: v - kn[k].get(y, 0.0) for y, v in T(col).items()}
+               for k, col in (("dok", "独自給付"), ("kokko", "国庫負担"), ("hoken", "保険料"), ("tumi", "積立金"),
+                              ("kyo", "基礎年金拠出金"))}
+    else:
+        kou = dict(dok=T("独自給付"), kokko=T("国庫負担"), hoken=T("保険料"), tumi=T("積立金"), kyo=T("基礎年金拠出金"))
     d = dict(
         kiso={int(r[0]): r[1] * en for r in rows},
-        dok=scale(A.series(tou, "独自給付", 2000), oku),
-        fuku=scale(A.series(tou, "福祉", 2000), oku),
-        kn2=scale(add(*[A.series(sh, k) for k in KN2]), en),
-        kokko=add(scale(A.series(tou, "国庫負担", 2000), oku),
-                  scale(add(*[A.series(sh, k) for k in KN_KOKKO]), en)),
-        hoken=add(scale(A.series(tou, "保険料", 2000), oku),
-                  scale(add(*[A.series(sh, k) for k in KN_HOKEN]), en)),
-        tumi=add(scale(A.series(tou, "積立金", 2000), oku),
-                 scale(A.series(sh, "年度末積立金"), en)),
+        dok=kou["dok"],
+        fuku=T("福祉"),
+        kn2=kn["dok"],
+        kokko=add(kou["kokko"], kn["kokko"]),
+        hoken=add(kou["hoken"], kn["hoken"]),
+        tumi=add(kou["tumi"], kn["tumi"]),
         rate=A.series(K["経済前提"], "運用利回り"),   # 名目運用利回り（1＋i の倍率）
+        kou=kou, kn=kn,
     )
     return d
 
@@ -126,8 +148,8 @@ def pv(s, mid):
     return sum(s.get(y, 0.0) / mid[y] for y in mid)
 
 
-def keisan(case):
-    R = {p: load(case, p) for p in ("", "AK", "AJ")}
+def keisan(case, run=None):
+    R = {p: load(case, p, run) for p in ("", "AK", "AJ")}
     if any(v is None for v in R.values()):
         return None
     base = R[""]
@@ -345,31 +367,24 @@ KOHYO_SEIDO = {
 }
 
 
-def seido(case, o):
+def seido(case, o, run=None):
     """財源と給付を、期間（過去・将来）と制度（被用者年金・国民年金）に分ける。
     基礎年金は「誰が払うか」（被用者年金4制度の基礎年金拠出金／国民年金の拠出金と特別国庫負担）で分ける。
     公表の「厚生年金、国民年金別」と同じ分け方。保険料は制度ごとに
       過去期間分 ＝ 過去期間の給付 − 過去期間分の国庫負担 − 2024年度末の積立金
       将来期間分 ＝ 将来期間の給付 − 将来期間分の国庫負担
     で割り振る（2120年度末に残る積立金の現在価値の分だけ、保険料の合計とずれる）。"""
-    b0 = load(case, "")
+    b0 = load(case, "", run)
     mid, end = factors(b0["rate"])
     r = {}
     for pre in ("", "AK"):
-        d = load(case, pre)
-        tag = "09" if pre else "08"
-        S = A.read_blocks(os.path.join(SUURI, "emp", "rslt", "ez_arev", "shushi",
-                                       f"03summary.{pre}{case}-{case}-{case}-{case}-1120-000_{tag}sum.csv"))
-        t = S["収支[全厚年１:tou]"]
-        kokK = pv(scale(A.series(t, "国庫負担", 2000), 1e-4), mid)
-        r[pre] = dict(kyoK=pv(scale(A.series(t, "基礎年金拠出金", 2000), 1e-4), mid), kokK=kokK,
-                      kokN=pv(d["kokko"], mid) - kokK, kn2=pv(d["kn2"], mid))
+        d = load(case, pre, run)
+        k = d["kou"]
+        r[pre] = dict(kyoK=pv(k["kyo"], mid), kokK=pv(k["kokko"], mid), kokN=pv(d["kn"]["kokko"], mid),
+                      kn2=pv(d["kn2"], mid))
         if not pre:
-            kek = A.read_blocks(os.path.join(SUURI, "bas", "rslt", f"kekka{case}-{case}-{case}-{case}-1120-000a.csv"))
-            hokK = pv(scale(A.series(t, "保険料", 2000), 1e-4), mid)
-            tK = scale(A.series(t, "積立金", 2000), 1e-4)
-            tN = scale(A.series(kek["収支見通し"], "年度末積立金"), 1e-12)
-            r[pre].update(hokK=hokK, hokN=pv(d["hoken"], mid) - hokK, t24K=tK[Y0], t24N=tN[Y0],
+            tK, tN = k["tumi"], d["kn"]["tumi"]
+            r[pre].update(hokK=pv(k["hoken"], mid), hokN=pv(d["kn"]["hoken"], mid), t24K=tK[Y0], t24N=tN[Y0],
                           t120K=tK[Y1] / end[Y1], t120N=tN[Y1] / end[Y1])
     a, f = r["AK"], r[""]
     z = dict(kiso_pK=a["kyoK"], kiso_pN=o["kakok"] - a["kyoK"], kiso_fK=f["kyoK"] - a["kyoK"],
